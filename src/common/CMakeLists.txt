@@ -1,3 +1,5 @@
+include_directories (BEFORE ..)
+
 set(COMMON_SOURCE_FILES
      error.cpp
 )
