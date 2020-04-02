@@ -1,3 +1,4 @@
+include_directories (BEFORE ..)
 set(DEVICE_SOURCE
         physical_dev.cpp
         device_manager.cpp

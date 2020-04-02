@@ -1,5 +1,6 @@
+include_directories (BEFORE ..)
+
 set(COMMON_SOURCE_FILES
-     homestore_config.cpp
      error.cpp
 )
 add_library(hs_common OBJECT ${COMMON_SOURCE_FILES})

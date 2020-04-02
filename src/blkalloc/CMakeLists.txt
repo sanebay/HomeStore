@@ -1,3 +1,5 @@
+include_directories (BEFORE ..)
+
 set(BLKALLOC_SOURCE
   #dynamic_blk_allocator.cpp
         fixed_blk_allocator.cpp
