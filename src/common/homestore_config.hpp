@@ -17,9 +17,10 @@
 #include <nlohmann/json.hpp>
 #include <sisl/options/options.h>
 #include <sisl/settings/settings.hpp>
+#include <sisl/utility/enum.hpp>
 
-#include "engine/common/error.h"
-#include "engine/common/generated/homestore_config_generated.h"
+#include "error.h"
+#include "common/generated/homestore_config_generated.h"
 #include "homestore_header.hpp"
 
 SETTINGS_INIT(homestorecfg::HomeStoreSettings, homestore_config);
@@ -51,22 +52,38 @@ namespace homestore {
 // system command to get these parameteres directly from disks. Or Consumer want to override
 // the default values.
 
+static std::string _format_decimals(double val, const char* suffix) {
+    return (val != (uint64_t)val) ? fmt::format("{:.2f}{}", val, suffix) : fmt::format("{}{}", val, suffix);
+}
+
+static std::string in_bytes(uint64_t sz) {
+    static constexpr std::array< std::pair< uint64_t, const char* >, 5 > arr{
+        std::make_pair(1, ""), std::make_pair(1024, "kb"), std::make_pair(1048576, "mb"),
+        std::make_pair(1073741824, "gb"), std::make_pair(1099511627776, "tb")};
+
+    const double size = (double)sz;
+    for (size_t i{1}; i < arr.size(); ++i) {
+        if ((size / arr[i].first) < 1) { return _format_decimals(size / arr[i - 1].first, arr[i - 1].second); }
+    }
+    return _format_decimals(size / arr.back().first, arr.back().second);
+}
+
 struct cap_attrs {
-    uint64_t used_data_size{0};     // access-mgr should use this for used data size;
+    uint64_t used_data_size{0};     // consumer should use this for used data size;
     uint64_t used_index_size{0};    // used size of index mgr store;
     uint64_t used_log_size{0};      // used size of logstore;
     uint64_t used_metablk_size{0};  // used size of meta blk store;
     uint64_t used_total_size{0};    // used total size including data and metadata;
-    uint64_t initial_total_size{0}; // access-mgr uses this field to report to host for available user data capacity;
+    uint64_t initial_total_size{0}; // consumer uses this field to report to host for available user data capacity;
     uint64_t initial_total_data_meta_size{0}; // total capacity including data and metadata;
-    std::string to_string() {
-        std::ostringstream ss{};
-        ss << "used_data_size = " << used_data_size << ", used_index_size = " << used_index_size
-           << ", used_log_size = " << used_log_size << ", used_metablk_size = " << used_metablk_size
-           << ", used_total_size = " << used_total_size << ", initial_total_size = " << initial_total_size
-           << ", initial_total_data_meta_size = " << initial_total_data_meta_size;
-        return ss.str();
+    std::string to_string() const {
+        return fmt::format("used_data_size={}, used_index_size={}, used_log_size={}, used_metablk_size={}, "
+                           "used_total_size={}, initial_total_size={}, initial_total_data_meta_size={}",
+                           in_bytes(used_data_size), in_bytes(used_index_size), in_bytes(used_log_size),
+                           in_bytes(used_metablk_size), in_bytes(used_total_size), in_bytes(initial_total_size),
+                           in_bytes(initial_total_data_meta_size));
     }
+
     void add(const cap_attrs& other) {
         used_data_size += other.used_data_size;
         used_index_size += other.used_index_size;
@@ -91,7 +108,8 @@ public:
                           static_cast< uint64_t >(1024)}; // memory available for the app (including cache)
     uint64_t hugepage_size{0};                            // memory available for the hugepage
     bool is_read_only{false};                             // Is read only
-    bool start_http{true};
+    bool auto_recovery{true};                             // Recovery of data is automatic or controlled by the caller
+    // std::unordered_map< service_t, service_options > services;
 
 #ifdef _PRERELEASE
     bool force_reinit{false};
@@ -108,9 +126,11 @@ public:
         json["fast_open_flags"] = fast_open_flags;
         json["is_read_only"] = is_read_only;
 
-        json["min_virtual_page_size"] = min_virtual_page_size;
-        json["app_mem_size"] = app_mem_size;
-        json["hugepage_size"] = hugepage_size;
+        json["min_virtual_page_size"] = in_bytes(min_virtual_page_size);
+        json["app_mem_size"] = in_bytes(app_mem_size);
+        json["hugepage_size"] = in_bytes(hugepage_size);
+        json["auto_recovery?"] = auto_recovery;
+
         return json;
     }
     std::string to_string() const { return to_json().dump(4); }
@@ -118,22 +138,18 @@ public:
 };
 
 struct hs_engine_config {
-    size_t min_io_size{8192};        // minimum io size supported by
+    size_t min_io_size{4096};        // minimum io size supported by
     uint64_t max_chunks{MAX_CHUNKS}; // These 3 parameters can be ONLY changed with upgrade/revert from device manager
     uint64_t max_vdevs{MAX_VDEVS};
     uint64_t max_pdevs{MAX_PDEVS};
-    uint64_t memvec_max_io_size{min_io_size};
-    uint64_t max_vol_io_size{memvec_max_io_size};
     uint32_t max_blks_in_blkentry{1}; // Max blks a represents in a single BlkId entry
 
     nlohmann::json to_json() const {
         nlohmann::json json;
-        json["min_io_size"] = min_io_size;
+        json["min_io_size"] = in_bytes(min_io_size);
         json["max_chunks"] = max_chunks;
         json["max_vdevs"] = max_vdevs;
         json["max_pdevs"] = max_pdevs;
-        json["memvec_max_io_size"] = memvec_max_io_size;
-        json["max_vol_io_size"] = max_vol_io_size;
         json["max_blks_in_blkentry"] = max_blks_in_blkentry;
         return json;
     }
@@ -197,24 +213,15 @@ constexpr uint32_t BLK_NUM_BITS{32};
 constexpr uint32_t NBLKS_BITS{8};
 constexpr uint32_t CHUNK_NUM_BITS{8};
 constexpr uint32_t BLKID_SIZE_BITS{BLK_NUM_BITS + NBLKS_BITS + CHUNK_NUM_BITS};
-constexpr uint32_t MEMPIECE_ENCODE_MAX_BITS{8};
-constexpr uint64_t MAX_CHUNK_ID{
-    ((static_cast< uint64_t >(1) << CHUNK_NUM_BITS) - 2)}; // one less to indicate invalid chunks
+constexpr uint64_t MAX_CHUNK_ID{((uint64_cast(1) << CHUNK_NUM_BITS) - 2)}; // one less to indicate invalid chunks
 constexpr uint64_t BLKID_SIZE{(BLKID_SIZE_BITS / 8) + (((BLKID_SIZE_BITS % 8) != 0) ? 1 : 0)};
 constexpr uint32_t BLKS_PER_PORTION{1024};
 constexpr uint32_t TOTAL_SEGMENTS{8};
-constexpr uint64_t MAX_BLK_NUM_BITS_PER_CHUNK{((static_cast< uint64_t >(1) << BLK_NUM_BITS) - 1)};
+constexpr uint64_t MAX_BLK_NUM_BITS_PER_CHUNK{((uint64_cast(1) << BLK_NUM_BITS) - 1)};
 
-/* NOTE: it can give size more then the size passed in argument to make it aligned */
-// #define ALIGN_SIZE(size, align) (((size % align) == 0) ? size : (size + (align - (size % align))))
-
-/* NOTE: it can give size less then size passed in argument to make it aligned */
-// #define ALIGN_SIZE_TO_LEFT(size, align) (((size % align) == 0) ? size : (size - (size % align)))
-
-inline uint64_t MIN_DATA_CHUNK_SIZE(const uint32_t page_size) { return page_size * BLKS_PER_PORTION * TOTAL_SEGMENTS; }
-inline uint64_t MAX_DATA_CHUNK_SIZE(const uint32_t page_size) {
-    return static_cast< uint64_t >(
-        sisl::round_down((MAX_BLK_NUM_BITS_PER_CHUNK * page_size), MIN_DATA_CHUNK_SIZE(page_size)));
+inline uint64_t MIN_DATA_CHUNK_SIZE(uint32_t blk_size) { return blk_size * BLKS_PER_PORTION * TOTAL_SEGMENTS; }
+inline uint64_t MAX_DATA_CHUNK_SIZE(uint32_t blk_size) {
+    return uint64_cast(sisl::round_down((MAX_BLK_NUM_BITS_PER_CHUNK * blk_size), MIN_DATA_CHUNK_SIZE(blk_size)));
 } // 16 TB
 
 constexpr uint16_t MAX_UUID_LEN{128};

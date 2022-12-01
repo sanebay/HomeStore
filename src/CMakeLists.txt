@@ -17,40 +17,35 @@ set (COMMON_DEPS
     )
 
 set(COMMON_TEST_DEPS
-    ${COMMON_DEPS}
-    ${spdk_LIBRARY_LIST}
-    ${dpdk_LIBRARY_LIST}
-    GTest::gmock
-)
+        ${COMMON_DEPS}
+        ${spdk_LIBRARY_LIST}
+        ${dpdk_LIBRARY_LIST}
+        GTest::gmock
+    )
 
 include_directories (BEFORE .)
 include_directories (BEFORE ${CMAKE_CURRENT_BINARY_DIR})
 
-add_subdirectory(engine)
-add_subdirectory(homeblks)
-add_subdirectory(homelogstore)
-add_subdirectory(test_scripts)
+add_subdirectory(blkalloc)
+add_subdirectory(device)
+add_subdirectory(common)
+add_subdirectory(logstore)
+add_subdirectory(meta)
+#add_subdirectory(index)
 
-add_library(homestore)
-target_sources(homestore PRIVATE
-      $<TARGET_OBJECTS:hs_engine>
-      $<TARGET_OBJECTS:hs_common>
-      $<TARGET_OBJECTS:hs_device>
-      $<TARGET_OBJECTS:hs_blkalloc>
-      $<TARGET_OBJECTS:hs_logdev>
-      $<TARGET_OBJECTS:hs_metablk>
-      $<TARGET_OBJECTS:indx_mgr>
-    )
+set(HOMESTORE_OBJECTS
+    $<TARGET_OBJECTS:hs_common> 
+    $<TARGET_OBJECTS:hs_device> 
+    $<TARGET_OBJECTS:hs_blkalloc> 
+    $<TARGET_OBJECTS:hs_logdev> 
+    $<TARGET_OBJECTS:hs_metablk>
+    homestore.cpp
+    #$<TARGET_OBJECTS:hs_cp>
+    #$<TARGET_OBJECTS:indx_mgr>
+)
+#target_link_libraries(homestore_objs ${COMMON_DEPS})
 
-add_library(homeblks)
-target_sources(homeblks PRIVATE
-      $<TARGET_OBJECTS:hs_engine>
-      $<TARGET_OBJECTS:hs_common>
-      $<TARGET_OBJECTS:hs_device>
-      $<TARGET_OBJECTS:hs_blkalloc>
-      $<TARGET_OBJECTS:hs_logdev>
-      $<TARGET_OBJECTS:hs_metablk>
-      $<TARGET_OBJECTS:indx_mgr>
-      $<TARGET_OBJECTS:hs_homeblks>
-      $<TARGET_OBJECTS:hs_volume>
-    )
+add_library(homestore STATIC 
+    ${HOMESTORE_OBJECTS} 
+)
+target_link_libraries(homestore ${COMMON_DEPS})

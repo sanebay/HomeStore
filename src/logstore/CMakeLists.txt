@@ -9,7 +9,7 @@ target_sources(hs_logdev PRIVATE
       log_stream.cpp
       log_store.cpp
       log_store_family.cpp
-      log_store_mgr.cpp
+      log_store_service.cpp
     )
 target_link_libraries(hs_logdev ${COMMON_DEPS})
 
@@ -19,7 +19,7 @@ can_build_io_tests(io_tests)
 if (${io_tests})
     add_executable(test_log_store)
     target_sources(test_log_store PRIVATE tests/test_log_store.cpp)
-    target_link_libraries(test_log_store hs_logdev homeblks ${COMMON_TEST_DEPS} )
+    target_link_libraries(test_log_store hs_logdev homestore ${COMMON_TEST_DEPS} )
 
     can_build_epoll_io_tests(epoll_tests)
     if(${epoll_tests})
@@ -41,6 +41,6 @@ is_non_coverage_build(non_coverage_build)
 if (${non_coverage_build})
     add_executable(log_store_benchmark)
     target_sources(log_store_benchmark PRIVATE tests/log_store_benchmark.cpp)
-    target_link_libraries(log_store_benchmark hs_logdev homeblks ${COMMON_TEST_DEPS} benchmark::benchmark )
+    target_link_libraries(log_store_benchmark hs_logdev homestore ${COMMON_TEST_DEPS} benchmark::benchmark )
     #add_test(NAME TestLogBench COMMAND test_log_benchmark)
 endif()

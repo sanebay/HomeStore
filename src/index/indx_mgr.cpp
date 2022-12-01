@@ -7,7 +7,7 @@
 
 #include <engine/homeds/btree/btree.hpp>
 
-#include <homelogstore/log_store.hpp>
+#include <logstore/log_store.hpp>
 
 #include "blk_read_tracker.hpp"
 #include "indx_mgr.hpp"
@@ -524,7 +524,9 @@ void IndxMgr::recovery() {
         THIS_INDX_LOG(INFO, replay, , "recovery completed");
     }
         // fall through
-    default: { m_recovery_mode = false; }
+    default: {
+        m_recovery_mode = false;
+    }
     }
 }
 

@@ -8,7 +8,7 @@
 #include <sisl/options/options.h>
 #include <sisl/utility/thread_buffer.hpp>
 
-#include "engine/common/homestore_header.hpp"
+#include "common/homestore_header.hpp"
 #include "varsize_blk_allocator.h"
 
 #include "blk_cache_queue.h"

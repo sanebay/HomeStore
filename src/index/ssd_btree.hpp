@@ -23,7 +23,7 @@
 #include "btree_store.hpp"
 #include "btree_node.h"
 #include "physical_node.hpp"
-#include "homelogstore/log_store.hpp"
+#include "logstore/log_store.hpp"
 #include "engine/common/homestore_config.hpp"
 #include "engine/common/homestore_flip.hpp"
 

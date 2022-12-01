@@ -21,8 +21,8 @@
 #include <sisl/fds/thread_vector.hpp>
 #include <sisl/fds/buffer.hpp>
 
-#include "engine/common/homestore_config.hpp"
-#include "engine/common/homestore_assert.hpp"
+#include "../common/homestore_config.hpp"
+#include "../common/homestore_assert.hpp"
 
 namespace homestore {
 
@@ -82,9 +82,7 @@ public:
         return val;
     }
 
-    explicit BlkId(const uint64_t id_int) {
-        set(id_int);
-    }
+    explicit BlkId(const uint64_t id_int) { set(id_int); }
     BlkId(const blk_num_t blk_num, const blk_count_t nblks, const chunk_num_t chunk_num = 0) {
         set(blk_num, nblks, chunk_num);
     }
@@ -99,7 +97,7 @@ public:
 
     [[nodiscard]] bool is_valid() const { return (m_chunk_num != s_chunk_num_mask); }
 
-        [[nodiscard]] BlkId get_blkid_at(const uint32_t offset, const uint32_t pagesz) const {
+    [[nodiscard]] BlkId get_blkid_at(const uint32_t offset, const uint32_t pagesz) const {
         assert(offset % pagesz == 0);
         const uint32_t remaining_size{((get_nblks() - (offset / pagesz)) * pagesz)};
         return (get_blkid_at(offset, remaining_size, pagesz));
@@ -153,10 +151,8 @@ public:
     }
     [[nodiscard]] chunk_num_t get_chunk_num() const { return m_chunk_num; }
 
-        /* A blkID represent a page size which is assigned to a blk allocator */
-        [[nodiscard]] uint32_t data_size(const uint32_t page_size) const {
-        return (get_nblks() * page_size);
-    }
+    /* A blkID represent a page size which is assigned to a blk allocator */
+    [[nodiscard]] uint32_t data_size(const uint32_t page_size) const { return (get_nblks() * page_size); }
 
     [[nodiscard]] std::string to_string() const {
         return is_valid() ? fmt::format("BlkNum={} nblks={} chunk={}", get_blk_num(), get_nblks(), get_chunk_num())
@@ -242,13 +238,14 @@ std::basic_ostream< charT, traits >& operator<<(std::basic_ostream< charT, trait
 }
 
 VENUM(BlkAllocStatus, uint32_t,
-      BLK_ALLOC_NONE = 0,     // No Action taken
-      SUCCESS = 1ul << 0,     // Success
-      FAILED = 1ul << 1,      // Failed to alloc/free
-      REQ_MORE = 1ul << 2,    // Indicate that we need more
-      SPACE_FULL = 1ul << 3,  // Space is full
-      INVALID_DEV = 1ul << 4, // Invalid Device provided for alloc
-      PARTIAL = 1ul << 5      // In case of multiple blks, only partial is alloced/freed
+      BLK_ALLOC_NONE = 0,       // No Action taken
+      SUCCESS = 1ul << 0,       // Success
+      FAILED = 1ul << 1,        // Failed to alloc/free
+      REQ_MORE = 1ul << 2,      // Indicate that we need more
+      SPACE_FULL = 1ul << 3,    // Space is full
+      INVALID_DEV = 1ul << 4,   // Invalid Device provided for alloc
+      PARTIAL = 1ul << 5,       // In case of multiple blks, only partial is alloced/freed
+      INVALID_THREAD = 1ul << 6 // Not possible to alloc in this thread
 );
 } // namespace homestore
 

@@ -93,7 +93,24 @@ typedef uint16_t csum_t;
 typedef int64_t seq_id_t;
 const csum_t init_crc_16 = 0x8005;
 
+typedef boost::uuids::uuid uuid_t;
+
 static constexpr crc32_t init_crc32 = 0x12345678;
 static constexpr crc32_t INVALID_CRC32_VALUE = 0x0u;
+
+#if 0
+struct sg_list {
+    size_t size;
+    std::vector< iovec > iovs;
+
+    void calculate_size() {
+        size = 0;
+        for (const auto& iov : iovs) {
+            size += iovs.iov_len;
+        }
+    }
+};
+#endif
+
 } // namespace homestore
 #endif
