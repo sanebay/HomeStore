@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.13)
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 
@@ -23,23 +23,25 @@ set(COMMON_TEST_DEPS
         GTest::gmock
     )
 
-include_directories (BEFORE .)
+include_directories (BEFORE lib/)
+include_directories (BEFORE include/)
 include_directories (BEFORE ${CMAKE_CURRENT_BINARY_DIR})
 
-add_subdirectory(blkalloc)
-add_subdirectory(device)
-add_subdirectory(common)
-add_subdirectory(logstore)
-add_subdirectory(meta)
-#add_subdirectory(index)
+add_subdirectory(lib/blkalloc)
+add_subdirectory(lib/device)
+add_subdirectory(lib/common)
+add_subdirectory(lib/logstore)
+add_subdirectory(lib/meta)
+#add_subdirectory(lib/index)
 
+add_subdirectory(tests)
 set(HOMESTORE_OBJECTS
     $<TARGET_OBJECTS:hs_common> 
     $<TARGET_OBJECTS:hs_device> 
     $<TARGET_OBJECTS:hs_blkalloc> 
     $<TARGET_OBJECTS:hs_logdev> 
     $<TARGET_OBJECTS:hs_metablk>
-    homestore.cpp
+    lib/homestore.cpp
     #$<TARGET_OBJECTS:hs_cp>
     #$<TARGET_OBJECTS:indx_mgr>
 )
