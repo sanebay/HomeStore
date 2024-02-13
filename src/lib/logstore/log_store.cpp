@@ -28,9 +28,9 @@
 namespace homestore {
 SISL_LOGGING_DECL(logstore)
 
-#define THIS_LOGSTORE_LOG(level, msg, ...) HS_SUBMOD_LOG(level, logstore, , "store", m_fq_name, msg, __VA_ARGS__)
+#define THIS_LOGSTORE_LOG(level, msg, ...) HS_SUBMOD_LOG(level, logstore, , "log_store", m_fq_name, msg, __VA_ARGS__)
 #define THIS_LOGSTORE_PERIODIC_LOG(level, msg, ...)                                                                    \
-    HS_PERIODIC_DETAILED_LOG(level, logstore, "store", m_fq_name, , , msg, __VA_ARGS__)
+    HS_PERIODIC_DETAILED_LOG(level, logstore, "log_store", m_fq_name, , , msg, __VA_ARGS__)
 
 HomeLogStore::HomeLogStore(std::shared_ptr< LogDev > logdev, logstore_id_t id, bool append_mode,
                            logstore_seq_num_t start_lsn) :
@@ -39,7 +39,7 @@ HomeLogStore::HomeLogStore(std::shared_ptr< LogDev > logdev, logstore_id_t id, b
         m_records{"HomeLogStoreRecords", start_lsn - 1},
         m_append_mode{append_mode},
         m_seq_num{start_lsn},
-        m_fq_name{fmt::format("{}.{}", logdev->get_id(), id)},
+        m_fq_name{fmt::format("{} log_dev={}", id, logdev->get_id())},
         m_metrics{logstore_service().metrics()} {
     m_truncation_barriers.reserve(10000);
     m_safe_truncation_boundary.ld_key = m_logdev->get_last_flush_ld_key();
@@ -121,7 +121,7 @@ log_buffer HomeLogStore::read_sync(logstore_seq_num_t seq_num) {
     // If seq_num has not been flushed yet, but issued, then we flush them before reading
     auto const s = m_records.status(seq_num);
     if (s.is_out_of_range || s.is_hole) {
-        // THIS_LOGSTORE_LOG(DEBUG, "ld_key not valid {}", seq_num);
+        // THIS_LOGSTORE_LOG(ERROR, "ld_key not valid {}", seq_num);
         throw std::out_of_range("key not valid");
     } else if (!s.is_completed) {
         THIS_LOGSTORE_LOG(TRACE, "Reading lsn={}:{} before flushed, doing flush first", m_store_id, seq_num);
@@ -397,7 +397,7 @@ void HomeLogStore::flush_sync(logstore_seq_num_t upto_seq_num) {
     if (upto_seq_num == invalid_lsn()) { upto_seq_num = m_records.active_upto(); }
 
     // if we have flushed already, we are done
-    if (!m_records.status(upto_seq_num).is_active) { return; }
+    // if (!m_records.status(upto_seq_num).is_active) { return; }
 
     {
         std::unique_lock lk(m_sync_flush_mtx);
@@ -408,7 +408,7 @@ void HomeLogStore::flush_sync(logstore_seq_num_t upto_seq_num) {
 
         // Step 2: After marking this lsn, we again do a check, to avoid a race where completion checked for no lsn
         // and the lsn is stored in step 1 above.
-        if (!m_records.status(upto_seq_num).is_active) { return; }
+        // if (!m_records.status(upto_seq_num).is_active) { return; }
 
         // Step 3: Force a flush (with least threshold)
         m_logdev->flush_if_needed(1);

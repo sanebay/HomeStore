@@ -98,7 +98,7 @@ void LogStoreService::start(bool format) {
 }
 
 void LogStoreService::stop() {
-    device_truncate(nullptr, true, false);
+    // device_truncate(nullptr, true, false);
     for (auto& [id, logdev] : m_id_logdev_map) {
         logdev->stop();
     }
@@ -115,7 +115,6 @@ logdev_id_t LogStoreService::create_new_logdev() {
     auto logdev = create_new_logdev_internal(logdev_id);
     logdev->start(true /* format */, m_logdev_vdev.get());
     COUNTER_INCREMENT(m_metrics, logdevs_count, 1);
-    LOGINFO("Created log dev id {}", logdev_id);
     return logdev_id;
 }
 

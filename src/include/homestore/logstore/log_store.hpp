@@ -210,6 +210,8 @@ public:
         return (ts == std::numeric_limits< logstore_seq_num_t >::max()) ? -1 : ts;
     }
 
+    sisl::StreamTracker< logstore_record >& log_records() { return m_records; }
+
     /**
      * @brief iterator to get all the log buffers;
      *
