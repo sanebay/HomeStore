@@ -44,7 +44,7 @@ read_again:
         do {
             m_cur_log_buf = read_next_bytes(std::max(min_needed, bulk_read_size));
             if (m_cur_log_buf.size() == 0) {
-                LOGINFOMOD(logstore, "Logdev data empty");
+                LOGINFOMOD(logstore, "Logdev data empty log_dev={}", m_vdev_jd->logdev_id());
                 return {};
             }
         } while (m_cur_log_buf.size() < sizeof(log_group_header));
@@ -54,8 +54,8 @@ read_again:
     HS_REL_ASSERT_GE(m_cur_log_buf.size(), m_read_size_multiple);
     const auto* header = r_cast< log_group_header const* >(m_cur_log_buf.bytes());
     if (header->magic_word() != LOG_GROUP_HDR_MAGIC) {
-        LOGINFOMOD(logstore, "Logdev data not seeing magic at pos {}, must have come to end of logdev",
-                   m_vdev_jd->dev_offset(m_cur_read_bytes));
+        LOGINFOMOD(logstore, "Logdev data not seeing magic at pos {}, must have come to end of log_dev={}",
+                   m_vdev_jd->dev_offset(m_cur_read_bytes), m_vdev_jd->logdev_id());
         *out_dev_offset = m_vdev_jd->dev_offset(m_cur_read_bytes);
 
         // move it by dma boundary if header is not valid
@@ -65,8 +65,8 @@ read_again:
     }
 
     if (header->total_size() > m_cur_log_buf.size()) {
-        LOGINFOMOD(logstore, "Logstream group size {} is more than available buffer size {}, reading from store",
-                   header->total_size(), m_cur_log_buf.size());
+        LOGINFOMOD(logstore, "Logstream group size {} is more than available buffer size {}, reading from log_dev={}",
+                   header->total_size(), m_cur_log_buf.size(), m_vdev_jd->logdev_id());
         // Bigger group size than needed bytes, read again
         min_needed = sisl::round_up(header->total_size(), m_read_size_multiple);
         goto read_again;
@@ -74,15 +74,16 @@ read_again:
 
     LOGTRACEMOD(logstore,
                 "Logstream read log group of size={} nrecords={} m_cur_log_dev_offset {} buf size "
-                "remaining {} ",
-                header->total_size(), header->nrecords(), m_vdev_jd->dev_offset(m_cur_read_bytes),
-                m_cur_log_buf.size());
+                "remaining {} log_dev={}",
+                header->total_size(), header->nrecords(), m_vdev_jd->dev_offset(m_cur_read_bytes), m_cur_log_buf.size(),
+                m_vdev_jd->logdev_id());
 
     // compare it with prev crc
     if (m_prev_crc != 0 && m_prev_crc != header->prev_grp_crc) {
         // we reached at the end
-        LOGINFOMOD(logstore, "we have reached the end. crc doesn't match with the prev crc {}",
-                   m_vdev_jd->dev_offset(m_cur_read_bytes));
+        LOGINFOMOD(logstore,
+                   "we have reached the end. crc doesn't match offset {} prev crc {} header prev crc {} log_dev={}",
+                   m_vdev_jd->dev_offset(m_cur_read_bytes), header->prev_grp_crc, m_prev_crc, m_vdev_jd->logdev_id());
         *out_dev_offset = m_vdev_jd->dev_offset(m_cur_read_bytes);
 
         // move it by dma boundary if header is not valid
@@ -95,8 +96,9 @@ read_again:
     const auto* footer = r_cast< log_group_footer* >((uint64_t)m_cur_log_buf.bytes() + header->footer_offset);
     if (footer->magic != LOG_GROUP_FOOTER_MAGIC || footer->start_log_idx != header->start_log_idx) {
         LOGINFOMOD(logstore,
-                   "last write is not completely written. footer magic {} footer start_log_idx {} header log indx {}",
-                   footer->magic, footer->start_log_idx, header->start_log_idx);
+                   "last write is not completely written. footer magic {} footer start_log_idx {} header log indx {} "
+                   "log_dev={}",
+                   footer->magic, footer->start_log_idx, header->start_log_idx, m_vdev_jd->logdev_id());
         *out_dev_offset = m_vdev_jd->dev_offset(m_cur_read_bytes);
 
         // move it by dma boundary if header is not valid
@@ -112,8 +114,9 @@ read_again:
                    (header->total_size() - sizeof(log_group_header)));
     if (cur_crc != header->cur_grp_crc) {
         /* This is a valid entry so crc should match */
-        HS_REL_ASSERT(0, "data is corrupted");
-        LOGINFOMOD(logstore, "crc doesn't match {}", m_vdev_jd->dev_offset(m_cur_read_bytes));
+        HS_REL_ASSERT(0, "data is corrupted {}", m_vdev_jd->logdev_id());
+        LOGINFOMOD(logstore, "crc doesn't match {} log_dev={}", m_vdev_jd->dev_offset(m_cur_read_bytes),
+                   m_vdev_jd->logdev_id());
         *out_dev_offset = m_vdev_jd->dev_offset(m_cur_read_bytes);
 
         // move it by dma boundary if header is not valid
@@ -149,8 +152,8 @@ sisl::byte_view log_stream_reader::read_next_bytes(uint64_t nbytes) {
     auto sz_read = m_vdev_jd->sync_next_read(out_buf->bytes() + m_cur_log_buf.size(), nbytes);
     if (sz_read == 0) { return {}; }
 
-    LOGINFOMOD(logstore, "LogStream read {} bytes from vdev offset {} and vdev cur offset {}", nbytes, prev_pos,
-               m_vdev_jd->seeked_pos());
+    LOGINFOMOD(logstore, "LogStream read {} bytes from vdev offset {} and vdev cur offset {} lgodev={}", nbytes,
+               prev_pos, m_vdev_jd->seeked_pos(), m_vdev_jd->logdev_id());
     return sisl::byte_view{out_buf};
 }
 } // namespace homestore

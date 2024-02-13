@@ -231,7 +231,7 @@ off_t JournalVirtualDev::Descriptor::alloc_next_append_blk(size_t sz) {
 
     // assert that returnning logical offset is in good range
     HS_DBG_ASSERT_LE(tail_off, m_end_offset);
-    LOGDEBUGMOD(journalvdev, "returned tail_off 0x{} desc {}", to_hex(tail_off), to_string());
+    LOGDEBUGMOD(journalvdev, "returned tail_off 0x{} size {} desc {}", to_hex(tail_off), sz, to_string());
     return tail_off;
 }
 
@@ -443,6 +443,14 @@ off_t JournalVirtualDev::Descriptor::dev_offset(off_t nbytes) const {
     return vdev_offset;
 }
 
+void JournalVirtualDev::Descriptor::update_data_start_offset(off_t offset) {
+    m_data_start_offset = offset;
+    auto data_start_offset_aligned = sisl::round_down(m_data_start_offset, m_vdev.info().chunk_size);
+    m_end_offset = data_start_offset_aligned + m_journal_chunks.size() * m_vdev.info().chunk_size;
+    LOGTRACEMOD(journalvdev, "Updated data start offset off 0x{} {}", to_hex(offset), to_string());
+    RELEASE_ASSERT_EQ(m_end_offset - data_start_offset_aligned, m_total_size, "offset size mismatch {}", to_string());
+}
+
 off_t JournalVirtualDev::Descriptor::tail_offset(bool reserve_space_include) const {
     off_t tail = static_cast< off_t >(data_start_offset() + m_write_sz_in_total.load(std::memory_order_relaxed));
     if (reserve_space_include) { tail += m_reserved_sz; }
@@ -461,7 +469,7 @@ void JournalVirtualDev::Descriptor::update_tail_offset(off_t tail) {
     }
     lseek(tail);
 
-    LOGDEBUGMOD(journalvdev, "tail arg 0x{} desc {} ", to_hex(tail), to_string());
+    LOGDEBUGMOD(journalvdev, "Updated tail offset arg 0x{} desc {} ", to_hex(tail), to_string());
     HS_REL_ASSERT(tail_offset() == tail, "tail offset mismatch after calculation 0x{} : {}", tail_offset(), tail);
 }
 
@@ -598,7 +606,7 @@ bool JournalVirtualDev::Descriptor::is_alloc_accross_chunk(size_t size) const {
 
 nlohmann::json JournalVirtualDev::Descriptor::get_status(int log_level) const {
     nlohmann::json j;
-    j["logdev_id"] = m_logdev_id;
+    j["logdev"] = m_logdev_id;
     j["seek_cursor"] = m_seek_cursor;
     j["data_start_offset"] = m_data_start_offset;
     j["end_offset"] = m_end_offset;
@@ -613,7 +621,7 @@ nlohmann::json JournalVirtualDev::Descriptor::get_status(int log_level) const {
             nlohmann::json c;
             auto* private_data = r_cast< JournalChunkPrivate* >(const_cast< uint8_t* >(chunk->user_private()));
             c["chunk_id"] = chunk->chunk_id();
-            c["logdev_id"] = private_data->logdev_id;
+            c["logdev"] = private_data->logdev_id;
             c["is_head"] = private_data->is_head;
             c["end_of_chunk"] = private_data->end_of_chunk;
             c["next_chunk"] = private_data->next_chunk;
@@ -627,12 +635,13 @@ nlohmann::json JournalVirtualDev::Descriptor::get_status(int log_level) const {
 }
 
 std::string JournalVirtualDev::Descriptor::to_string() const {
-    std::string str{fmt::format("id={};ds=0x{};end=0x{};writesz={};tail=0x{};"
+    off_t tail =
+        static_cast< off_t >(data_start_offset() + m_write_sz_in_total.load(std::memory_order_relaxed)) + m_reserved_sz;
+    std::string str{fmt::format("log_dev={};ds=0x{};end=0x{};writesz={};tail=0x{};"
                                 "rsvdsz={};chunks={};trunc={};total={};seek=0x{} ",
                                 m_logdev_id, to_hex(m_data_start_offset), to_hex(m_end_offset),
-                                m_write_sz_in_total.load(std::memory_order_relaxed), to_hex(tail_offset()),
-                                m_reserved_sz, m_journal_chunks.size(), m_truncate_done, m_total_size,
-                                to_hex(m_seek_cursor))};
+                                m_write_sz_in_total.load(std::memory_order_relaxed), to_hex(tail), m_reserved_sz,
+                                m_journal_chunks.size(), m_truncate_done, m_total_size, to_hex(m_seek_cursor))};
     return str;
 }
 

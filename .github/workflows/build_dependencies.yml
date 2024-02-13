@@ -83,6 +83,7 @@ on:
 jobs:
   BuildHomestoreDeps:
     runs-on: ${{ inputs.platform }}
+    timeout-minutes: 24000
     steps:
     - name: Retrieve Code
       uses: actions/checkout@v3
@@ -206,18 +207,18 @@ jobs:
         fail_on_cache_miss: true
       if: ${{ inputs.testing == 'True' && github.event_name != 'pull_request' && steps.restore-cache.outputs.cache-hit != 'true' }}
 
+    - uses: actions/checkout@v3
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
+      with:
+        limit-access-to-actor: true
+        detached: true
+
     - name: Create and Test Package
       run: |
         sanitize=$([[ "${{ inputs.tooling }}" == "Sanitize" ]] && echo "True" || echo "False")
         pre=$([[ "${{ inputs.build-type }}" != "Debug" ]] && echo "-o sisl:prerelease=${{ inputs.prerelease }}" || echo "")
-        conan create \
-            ${pre} \
-            -o sisl:malloc_impl=${{ inputs.malloc-impl }} \
-            -o iomgr:testing=off \
-            -o homestore:sanitize=${sanitize} \
-            -s build_type=${{ inputs.build-type }} \
-            --build missing \
-            .
+        sleep 10000000
       if: ${{ inputs.testing == 'True' && inputs.tooling != 'Coverage' }}
 
     - name: Code Coverage Run

@@ -233,12 +233,7 @@ public:
          *
          * @param offset : the start logical offset to be persisted
          */
-        void update_data_start_offset(off_t offset) {
-            m_data_start_offset = offset;
-            auto data_start_offset_aligned = sisl::round_down(m_data_start_offset, m_vdev.info().chunk_size);
-            m_end_offset = data_start_offset_aligned + m_journal_chunks.size() * m_vdev.info().chunk_size;
-            RELEASE_ASSERT_EQ(m_end_offset - data_start_offset_aligned, m_total_size, "offset size mismatch");
-        }
+        void update_data_start_offset(off_t offset);
 
         /**
          * @brief : get the logical tail offset;
@@ -308,6 +303,8 @@ public:
          * @return Json containing internal details
          */
         nlohmann::json get_status(int log_level) const;
+
+        logdev_id_t logdev_id() const { return m_logdev_id; }
 
         std::string to_string() const;
 
