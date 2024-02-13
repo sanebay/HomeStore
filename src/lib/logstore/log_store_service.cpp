@@ -115,7 +115,6 @@ logdev_id_t LogStoreService::create_new_logdev() {
     auto logdev = create_new_logdev_internal(logdev_id);
     logdev->start(true /* format */, m_logdev_vdev.get());
     COUNTER_INCREMENT(m_metrics, logdevs_count, 1);
-    LOGINFO("Created log dev id {}", logdev_id);
     return logdev_id;
 }
 

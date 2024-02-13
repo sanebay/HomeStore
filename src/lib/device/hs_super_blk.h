@@ -157,11 +157,11 @@ class hs_super_blk {
 public:
     // Minium chunk size we can create in data device. Keeping this lower will increase number of chunks and thus
     // area for super block will be higher.
-    static constexpr uint64_t MIN_CHUNK_SIZE_DATA_DEVICE = 16 * 1024 * 1024;
+    static constexpr uint64_t MIN_CHUNK_SIZE_DATA_DEVICE = 8 * 1024 * 1024;
 
     // Higher min chunk size than data device to ensure to limit max chunks in fast pdevs and thus lesser super block
     // area on more expensive fast device.
-    static constexpr uint64_t MIN_CHUNK_SIZE_FAST_DEVICE = 32 * 1024 * 1024;
+    static constexpr uint64_t MIN_CHUNK_SIZE_FAST_DEVICE = 8 * 1024 * 1024;
 
     // Maximum number of chunks across all devices. We need to keep in mind the BlkId restriction (to address the
     // chunks)
