@@ -51,10 +51,14 @@ struct repl_key {
     std::string to_string() const { return fmt::format("server={}, term={}, dsn={}", server_id, term, dsn); }
 };
 
+#if 0
 struct repl_snapshot {
     uint64_t last_log_idx_{0};
     uint64_t last_log_term_{0};
 };
+#endif
+using repl_snapshot = nuraft::snapshot;
+using repl_snapshot_ptr = nuraft::ptr< nuraft::snapshot >;
 
 struct repl_journal_entry;
 struct repl_req_ctx : public boost::intrusive_ref_counter< repl_req_ctx, boost::thread_safe_counter > {
@@ -200,6 +204,13 @@ public:
 
     /// @brief Called when the snapshot is being created by nuraft;
     virtual AsyncReplResult<> create_snapshot(repl_snapshot& s) = 0;
+    virtual bool apply_snapshot(repl_snapshot& s) = 0;
+    virtual repl_snapshot_ptr last_snapshot() = 0;
+    virtual int read_logical_snp_obj(repl_snapshot& s, void*& user_snp_ctx, ulong obj_id, raft_buf_ptr_t& data_out,
+                                     bool& is_last_obj) = 0;
+
+    virtual void save_logical_snp_obj(repl_snapshot& s, ulong& obj_id, nuraft::buffer& data, bool is_first_obj,
+                                      bool is_last_obj) = 0;
 
 private:
     std::weak_ptr< ReplDev > m_repl_dev;

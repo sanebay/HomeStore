@@ -45,8 +45,8 @@ struct repl_journal_entry {
 
     std::string to_string() const {
         return fmt::format("version={}.{}, code={}, server_id={}, dsn={}, header_size={}, key_size={}, value_size={}",
-                           major_version, minor_version, enum_name(code), server_id, dsn, user_header_size, key_size,
-                           value_size);
+                           major_version, minor_version, 0 /* enum_name(code)*/, server_id, dsn, user_header_size,
+                           key_size, value_size);
     }
 
     std::string to_compact_string() const {

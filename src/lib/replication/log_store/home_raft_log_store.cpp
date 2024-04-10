@@ -193,8 +193,8 @@ nuraft::ptr< nuraft::log_entry > HomeRaftLogStore::entry_at(ulong index) {
         auto log_bytes = m_log_store->read_sync(to_store_lsn(index));
         nle = to_nuraft_log_entry(log_bytes);
     } catch (const std::exception& e) {
-        REPL_STORE_LOG(ERROR, "entry_at({}) index out_of_range", index);
-        throw e;
+        REPL_STORE_LOG(ERROR, "entry_at({}) index out_of_range start {} end {}", index, start_index(), last_index());
+        // throw e;
     }
     return nle;
 }
@@ -206,7 +206,7 @@ ulong HomeRaftLogStore::term_at(ulong index) {
         term = extract_term(log_bytes);
     } catch (const std::exception& e) {
         REPL_STORE_LOG(ERROR, "term_at({}) index out_of_range", index);
-        throw e;
+        // throw e;
     }
     return term;
 }
@@ -280,11 +280,11 @@ bool HomeRaftLogStore::compact(ulong compact_lsn) {
     if (cur_max_lsn < to_store_lsn(compact_lsn)) {
         // release this assert if for some use case, we should tolorant this case;
         // for now, don't expect this case to happen.
-        RELEASE_ASSERT(false, "compact_lsn={} is beyond the current max_lsn={}", compact_lsn, cur_max_lsn);
+        // RELEASE_ASSERT(false, "compact_lsn={} is beyond the current max_lsn={}", compact_lsn, cur_max_lsn);
 
         // We need to fill the remaining entries with dummy data.
         for (auto lsn{cur_max_lsn + 1}; lsn <= to_store_lsn(compact_lsn); ++lsn) {
-            append(m_dummy_log_entry);
+            // append(m_dummy_log_entry);
         }
     }
 

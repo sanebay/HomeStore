@@ -155,7 +155,50 @@ public:
                    *(r_cast< uint64_t const* >(key.cbytes())));
     }
 
-    AsyncReplResult<> create_snapshot(repl_snapshot& s) override { return make_async_success<>(); }
+    AsyncReplResult<> create_snapshot(repl_snapshot& s) override {
+        LOGINFOMOD(replication, "[Replica={}] Got snapshot callback term={} idx={}", g_helper->replica_num(),
+                   s.get_last_log_term(), s.get_last_log_idx());
+        auto snp_buf = s.serialize();
+        m_last_snapshot = nuraft::snapshot::deserialize(*snp_buf);
+
+        return make_async_success<>();
+    }
+
+    int read_logical_snp_obj(repl_snapshot& s, void*& user_snp_ctx, ulong obj_id, raft_buf_ptr_t& data_out,
+                             bool& is_last_obj) override {
+        LOGINFOMOD(replication, "[Replica={}] Read logical snapshot callback obj_id={} term={} idx={}",
+                   g_helper->replica_num(), obj_id, s.get_last_log_term(), s.get_last_log_idx());
+        data_out = nuraft::buffer::alloc(sizeof(ulong));
+        nuraft::buffer_serializer bs(data_out);
+        bs.put_u64(0);
+        if (obj_id == 0) {
+            is_last_obj = false;
+        } else {
+            is_last_obj = true;
+        }
+        return 0;
+    }
+
+    void save_logical_snp_obj(repl_snapshot& s, ulong& obj_id, nuraft::buffer& data, bool is_first_obj,
+                              bool is_last_obj) override {
+        LOGINFOMOD(replication, "[Replica={}] Save logical snapshot callback obj_id={} term={} idx={} is_last={}",
+                   g_helper->replica_num(), obj_id, s.get_last_log_term(), s.get_last_log_idx(), is_last_obj);
+        obj_id++;
+    }
+
+    bool apply_snapshot(repl_snapshot& s) override {
+        LOGINFOMOD(replication, "[Replica={}] Apply snapshot term={} idx={}", g_helper->replica_num(),
+                   s.get_last_log_term(), s.get_last_log_idx());
+        return true;
+    }
+
+    repl_snapshot_ptr last_snapshot() override {
+        if (!m_last_snapshot) return nullptr;
+
+        LOGINFOMOD(replication, "[Replica={}] Last snapshot term={} idx={}", g_helper->replica_num(),
+                   m_last_snapshot->get_last_log_term(), m_last_snapshot->get_last_log_idx());
+        return m_last_snapshot;
+    }
 
     ReplResult< blk_alloc_hints > get_blk_alloc_hints(sisl::blob const& header, uint32_t data_size) override {
         return blk_alloc_hints{};
@@ -226,11 +269,24 @@ public:
         return inmem_db_.size();
     }
 
+    void create_snapshot() {
+        auto raft_repl_dev = std::dynamic_pointer_cast< RaftReplDev >(repl_dev());
+        ulong snapshot_idx = raft_repl_dev->raft_server()->create_snapshot();
+        LOGINFO("Got snapshot index {}", snapshot_idx);
+    }
+
+    void truncate(int num_reserved_entries) {
+        auto raft_repl_dev = std::dynamic_pointer_cast< RaftReplDev >(repl_dev());
+        raft_repl_dev->truncate(num_reserved_entries);
+        LOGINFO("Truncated");
+    }
+
 private:
     std::map< Key, Value > inmem_db_;
     uint64_t commit_count_{0};
     std::shared_mutex db_mtx_;
     std::atomic< uint64_t > m_num_commits;
+    repl_snapshot_ptr m_last_snapshot{nullptr};
 };
 
 class RaftReplDevTest : public testing::Test {
@@ -360,6 +416,9 @@ public:
             std::this_thread::sleep_for(std::chrono::seconds{5});
         }
     }
+
+    void create_snapshot() { dbs_[0]->create_snapshot(); }
+    void truncate(int num_reserved_entries) { dbs_[0]->truncate(num_reserved_entries); }
 
 private:
     std::vector< std::shared_ptr< TestReplicatedDB > > dbs_;
@@ -575,6 +634,46 @@ TEST_F(RaftReplDevTest, Snapshot_and_Compact) {
     LOGINFO("Validate all data written so far by reading them");
     this->validate_data();
     g_helper->sync_for_cleanup_start();
+}
+
+TEST_F(RaftReplDevTest, SampleTest) {
+    LOGINFO("Homestore replica={} setup completed", g_helper->replica_num());
+    g_helper->sync_for_test_start();
+
+    uint64_t entries_per_attempt = 10;
+    this->write_on_leader(entries_per_attempt, true /* wait_for_commit */);
+
+    // Restart replica-1 with delay.
+    this->restart_replica(1, 20 /* shutdown_delay_sec */);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    // Write on leader.
+    this->write_on_leader(entries_per_attempt, false /* wait_for_commit */);
+
+    if (g_helper->replica_num() == 0 || g_helper->replica_num() == 2) {
+        this->wait_for_all_commits();
+        LOGINFO("Got all commits for replica 0 and 2");
+    }
+
+    // Leader does snapshot and truncate
+    if (g_helper->replica_num() == 0) {
+        this->create_snapshot();
+        this->truncate(0);
+    }
+
+    // Write on leader to have some entries for increment resync.
+    this->write_on_leader(entries_per_attempt, false /* wait_for_commit */);
+    if (g_helper->replica_num() == 0 || g_helper->replica_num() == 2) {
+        this->wait_for_all_commits();
+        LOGINFO("Got all commits for replica 0 and 2 second time");
+    }
+
+    this->wait_for_all_commits();
+    g_helper->sync_for_verify_start();
+    LOGINFO("Validate all data written so far by reading them");
+    this->validate_data();
+    g_helper->sync_for_cleanup_start();
+    LOGINFO("Test done");
 }
 
 int main(int argc, char* argv[]) {

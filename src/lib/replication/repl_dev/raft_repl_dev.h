@@ -118,6 +118,7 @@ public:
     std::string my_replica_id_str() const { return boost::uuids::to_string(m_my_repl_id); }
     uint32_t get_blk_size() const override;
     repl_lsn_t get_last_commit_lsn() const { return m_commit_upto_lsn.load(); }
+    void set_last_commit_lsn(repl_lsn_t lsn) { return m_commit_upto_lsn.store(lsn); }
 
     // void truncate_if_needed() override;
 

@@ -226,7 +226,10 @@ raft_buf_ptr_t RaftStateMachine::commit_ext(nuraft::state_machine::ext_op_params
     return m_success_ptr;
 }
 
-uint64_t RaftStateMachine::last_commit_index() { return uint64_cast(m_rd.get_last_commit_lsn()); }
+uint64_t RaftStateMachine::last_commit_index() {
+    RD_LOG(DEBUG, "Raft channel: last_commit_index {}", uint64_cast(m_rd.get_last_commit_lsn()));
+    return uint64_cast(m_rd.get_last_commit_lsn());
+}
 
 void RaftStateMachine::link_lsn_to_req(repl_req_ptr_t rreq, int64_t lsn) {
     rreq->lsn = lsn;
@@ -252,7 +255,23 @@ void RaftStateMachine::create_snapshot(nuraft::snapshot& s, nuraft::async_result
     m_rd.on_create_snapshot(s, when_done);
 }
 
+int RaftStateMachine::read_logical_snp_obj(nuraft::snapshot& s, void*& user_snp_ctx, ulong obj_id,
+                                           raft_buf_ptr_t& data_out, bool& is_last_obj) {
+    return m_rd.m_listener->read_logical_snp_obj(s, user_snp_ctx, obj_id, data_out, is_last_obj);
+}
+
+void RaftStateMachine::save_logical_snp_obj(nuraft::snapshot& s, ulong& obj_id, nuraft::buffer& data, bool is_first_obj,
+                                            bool is_last_obj) {
+    return m_rd.m_listener->save_logical_snp_obj(s, obj_id, data, is_first_obj, is_last_obj);
+}
+
+bool RaftStateMachine::apply_snapshot(nuraft::snapshot& s) {
+    m_rd.set_last_commit_lsn(s.get_last_log_idx());
+    return m_rd.m_listener->apply_snapshot(s);
+}
+
 std::string RaftStateMachine::rdev_name() const { return m_rd.rdev_name(); }
 
-nuraft::ptr< nuraft::snapshot > RaftStateMachine::last_snapshot() { return m_rd.get_last_snapshot(); }
+nuraft::ptr< nuraft::snapshot > RaftStateMachine::last_snapshot() { return m_rd.m_listener->last_snapshot(); }
+
 } // namespace homestore
