@@ -86,7 +86,7 @@ void LogDev::start(bool format) {
         m_last_flush_idx = m_log_idx - 1;
     }
 
-    start_timer();
+    // start_timer();
     handle_unopened_log_stores(format);
 
     {
