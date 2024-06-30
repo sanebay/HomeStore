@@ -130,7 +130,7 @@ ulong HomeRaftLogStore::next_slot() const {
 }
 
 ulong HomeRaftLogStore::last_index() const {
-    uint64_t last_index = m_log_store->get_contiguous_completed_seq_num(m_last_durable_lsn);
+    uint64_t last_index = to_repl_lsn(m_log_store->get_contiguous_completed_seq_num(m_last_durable_lsn));
     return last_index;
 }
 
@@ -160,9 +160,14 @@ ulong HomeRaftLogStore::append(nuraft::ptr< nuraft::log_entry >& entry) {
     REPL_STORE_LOG(TRACE, "append entry term={}, log_val_type={} size={}", entry->get_term(),
                    static_cast< uint32_t >(entry->get_val_type()), entry->get_buf().size());
     auto buf = entry->serialize();
+#if 1
     auto const next_seq =
         m_log_store->append_async(sisl::io_blob{buf->data_begin(), uint32_cast(buf->size()), false /* is_aligned */},
                                   nullptr /* cookie */, [buf](int64_t, sisl::io_blob&, logdev_key, void*) {});
+#else
+    auto const next_seq =
+        m_log_store->append_sync(sisl::io_blob{buf->data_begin(), uint32_cast(buf->size()), false /* is_aligned */});
+#endif
     return to_repl_lsn(next_seq);
 }
 
@@ -189,9 +194,14 @@ nuraft::ptr< std::vector< nuraft::ptr< nuraft::log_entry > > > HomeRaftLogStore:
     auto out_vec = std::make_shared< std::vector< nuraft::ptr< nuraft::log_entry > > >();
     m_log_store->foreach (to_store_lsn(start), [end, &out_vec](store_lsn_t cur, const log_buffer& entry) -> bool {
         bool ret = (cur < to_store_lsn(end) - 1);
-        if (cur < to_store_lsn(end)) { out_vec->emplace_back(to_nuraft_log_entry(entry)); }
+        if (cur < to_store_lsn(end)) {
+            out_vec->emplace_back(to_nuraft_log_entry(entry));
+            LOGINFO("HomeRaftLogStore::log_entries {}", to_repl_lsn(cur));
+        }
         return ret;
     });
+
+    LOGINFO("HomeRaftLogStore::log_entries start {} end {} size {}", start, end, out_vec->size());
     return out_vec;
 }
 

@@ -10,7 +10,7 @@ uint64_t ReplLogStore::append(nuraft::ptr< nuraft::log_entry >& entry) {
     // We don't want to transform anything that is not an app log
     if (entry->get_val_type() != nuraft::log_val_type::app_log) {
         ulong lsn = HomeRaftLogStore::append(entry);
-        RD_LOGD("append entry term={}, log_val_type={} lsn={} size={}", entry->get_term(),
+        LOGINFO("append entry term={}, log_val_type={} lsn={} size={}", entry->get_term(),
                 static_cast< uint32_t >(entry->get_val_type()), lsn, entry->get_buf().size());
         return lsn;
     }
@@ -19,7 +19,7 @@ uint64_t ReplLogStore::append(nuraft::ptr< nuraft::log_entry >& entry) {
     ulong lsn = HomeRaftLogStore::append(entry);
     m_sm.link_lsn_to_req(rreq, int64_cast(lsn));
 
-    RD_LOGD("Raft Channel: Received append log entry rreq=[{}]", rreq->to_compact_string());
+    LOGINFO("Raft Channel: Received append log entry rreq=[{}]", rreq->to_compact_string());
     return lsn;
 }
 
@@ -41,17 +41,23 @@ void ReplLogStore::end_of_append_batch(ulong start_lsn, ulong count) {
 
     // Start fetch the batch of data for this lsn range from remote if its not available yet.
     auto reqs = sisl::VectorPool< repl_req_ptr_t >::alloc();
+    auto proposer_reqs = sisl::VectorPool< repl_req_ptr_t >::alloc();
     for (int64_t lsn = int64_cast(start_lsn); lsn <= end_lsn; ++lsn) {
         auto rreq = m_sm.lsn_to_req(lsn);
         // Skip this call in proposer, since this method will synchronously flush the data, which is not required for
         // leader. Proposer will call the flush as part of commit after receiving quorum, upon which time, there is a
         // high possibility the log entry is already flushed. Skip it for rreq == nullptr which is the case for raft
         // config entries.
-        if ((rreq == nullptr) || rreq->is_proposer()) { continue; }
-        reqs->emplace_back(std::move(rreq));
+        if ((rreq == nullptr) /*|| rreq->is_proposer()*/) {
+            continue;
+        } else if (rreq->is_proposer()) {
+            proposer_reqs->emplace_back(std::move(rreq));
+        } else {
+            reqs->emplace_back(std::move(rreq));
+        }
     }
 
-    RD_LOGT("Raft Channel: end_of_append_batch start_lsn={} count={} num_data_to_be_written={}", start_lsn, count,
+    LOGINFO("Raft Channel: end_of_append_batch start_lsn={} count={} num_data_to_be_written={}", start_lsn, count,
             reqs->size());
 
     // All requests are from proposer for data write, so as mentioned above we can skip the flush for now
@@ -73,8 +79,21 @@ void ReplLogStore::end_of_append_batch(ulong start_lsn, ulong count) {
         for (auto const& rreq : *reqs) {
             if (rreq) { rreq->add_state(repl_req_state_t::LOG_FLUSHED); }
         }
+        for (auto const& rreq : *reqs) {
+            if ((rreq == nullptr) || (!rreq->has_linked_data())) { continue; }
+            LOGINFO("Raft Channel: Data after future wait: rreq=[{}]", rreq->to_compact_string());
+        }
+    } else if (!proposer_reqs->empty()) {
+        LOGINFO("Raft Channel: end_of_append_batch, I am proposer, only flush log s from {} , count {}", start_lsn,
+                count);
+        // Mark all the reqs also completely written
+        HomeRaftLogStore::end_of_append_batch(start_lsn, count);
+        for (auto const& rreq : *proposer_reqs) {
+            if (rreq) { rreq->add_state(repl_req_state_t::LOG_FLUSHED); }
+        }
     }
     sisl::VectorPool< repl_req_ptr_t >::free(reqs);
+    sisl::VectorPool< repl_req_ptr_t >::free(proposer_reqs);
 }
 
 std::string ReplLogStore::rdev_name() const { return m_rd.rdev_name(); }

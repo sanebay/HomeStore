@@ -48,7 +48,7 @@ HomeLogStore::HomeLogStore(std::shared_ptr< LogDev > logdev, logstore_id_t id, b
 }
 
 bool HomeLogStore::write_sync(logstore_seq_num_t seq_num, const sisl::io_blob& b) {
-    HS_LOG_ASSERT((!iomanager.am_i_worker_reactor()), "Sync can not be done in worker reactor thread");
+    // HS_LOG_ASSERT((!iomanager.am_i_worker_reactor()), "Sync can not be done in worker reactor thread");
 
     // these should be static so that they stay in scope in the lambda in case function ends before lambda completes
     struct Context {
@@ -123,6 +123,13 @@ logstore_seq_num_t HomeLogStore::append_async(const sisl::io_blob& b, void* cook
     return seq_num;
 }
 
+logstore_seq_num_t HomeLogStore::append_sync(const sisl::io_blob& b) {
+    HS_DBG_ASSERT_EQ(m_append_mode, true, "append_async can be called only on append only mode");
+    const auto seq_num = m_seq_num.fetch_add(1, std::memory_order_acq_rel);
+    write_sync(seq_num, b);
+    return seq_num;
+}
+
 log_buffer HomeLogStore::read_sync(logstore_seq_num_t seq_num) {
     // If seq_num has not been flushed yet, but issued, then we flush them before reading
     auto const s = m_records.status(seq_num);
@@ -173,10 +180,11 @@ void HomeLogStore::read_async(logstore_seq_num_t seq_num, void* cookie, const lo
 #endif
 
 void HomeLogStore::on_write_completion(logstore_req* req, const logdev_key& ld_key) {
+    std::unique_lock lk(m_sync_flush_mtx);
     // Upon completion, create the mapping between seq_num and log dev key
     m_records.update(req->seq_num, [&](logstore_record& rec) -> bool {
         rec.m_dev_key = ld_key;
-        // THIS_LOGSTORE_LOG(DEBUG, "Completed write of lsn {} logdev_key={}", req->seq_num, ld_key);
+        LOGINFO("Completed write of store lsn {} logdev_key={}", req->seq_num, ld_key);
         return true;
     });
     // assert(flush_ld_key.idx >= m_last_flush_ldkey.idx);
@@ -402,10 +410,18 @@ void HomeLogStore::flush_sync(logstore_seq_num_t upto_seq_num) {
     HS_DBG_ASSERT_EQ(LogDev::can_flush_in_this_thread(), false,
                      "Logstore flush sync cannot be called on same thread which could do logdev flush");
 
+    std::unique_lock lk(m_single_sync_flush_mtx);
+    // HS_DBG_ASSERT_EQ(m_flush_twice.load(), false, "m_flush_twice is not false");
+    // m_flush_twice = true;
     if (upto_seq_num == invalid_lsn()) { upto_seq_num = m_records.active_upto(); }
 
     // if we have flushed already, we are done
-    if (!m_records.status(upto_seq_num).is_active) { return; }
+    if (!m_records.status(upto_seq_num).is_active) {
+        auto s = m_records.status(upto_seq_num);
+        LOGINFO("not is_active {}, not flushing is_active {}, is_complete {}, is_hole {}, is_out_of_range {}",
+                upto_seq_num, s.is_active, s.is_completed, s.is_hole, s.is_out_of_range);
+        return;
+    }
 
     {
         std::unique_lock lk(m_sync_flush_mtx);
@@ -416,17 +432,25 @@ void HomeLogStore::flush_sync(logstore_seq_num_t upto_seq_num) {
 
         // Step 2: After marking this lsn, we again do a check, to avoid a race where completion checked for no lsn
         // and the lsn is stored in step 1 above.
-        if (!m_records.status(upto_seq_num).is_active) { return; }
+        if (!m_records.status(upto_seq_num).is_active) {
+            auto s = m_records.status(upto_seq_num);
+            LOGINFO("not is_active {}, not flushing is_active {}, is_complete {}, is_hole {}, is_out_of_range {}",
+                    upto_seq_num, s.is_active, s.is_completed, s.is_hole, s.is_out_of_range);
+            return;
+        }
 
         // Step 3: Force a flush (with least threshold)
         m_logdev->flush_if_needed(1);
 
         // Step 4: Wait for completion
+        LOGINFO("flush_sync wait for not active {}", upto_seq_num);
         m_sync_flush_cv.wait(lk, [this, upto_seq_num] { return !m_records.status(upto_seq_num).is_active; });
 
         // NOTE: We are not resetting the lsn because same seq number should never have 2 completions and thus not
         // doing it saves an atomic instruction
+        LOGINFO("flush_sync over {}", upto_seq_num);
     }
+    // m_flush_twice = false;
 }
 
 uint64_t HomeLogStore::rollback_async(logstore_seq_num_t to_lsn, on_rollback_cb_t cb) {

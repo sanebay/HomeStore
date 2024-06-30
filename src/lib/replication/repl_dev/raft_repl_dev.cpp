@@ -211,7 +211,7 @@ void RaftReplDev::push_data_to_all_followers(repl_req_ptr_t rreq, sisl::sg_list 
            flatbuffers::FlatBufferToString(builder.GetBufferPointer() + sizeof(flatbuffers::uoffset_t),
                                            PushDataRequestTypeTable()));*/
 
-    RD_LOGD("Data Channel: Pushing data to all followers: rreq=[{}]", rreq->to_compact_string());
+    LOGINFO("Data Channel: Pushing data to all followers: rreq=[{}]", rreq->to_compact_string());
 
     group_msg_service()
         ->data_service_request_unidirectional(nuraft_mesg::role_regex::ALL, PUSH_DATA, rreq->m_pkts)
@@ -224,7 +224,7 @@ void RaftReplDev::push_data_to_all_followers(repl_req_ptr_t rreq, sisl::sg_list 
                 return;
             }
             // Release the buffer which holds the packets
-            RD_LOGD("Data Channel: Data push completed for rreq=[{}]", rreq->to_compact_string());
+            LOGINFO("Data Channel: Data push completed for rreq=[{}]", rreq->to_compact_string());
             rreq->release_fb_builder();
             rreq->m_pkts.clear();
         });
@@ -260,8 +260,11 @@ void RaftReplDev::on_push_data_received(intrusive< sisl::GenericRpcData >& rpc_d
         return;
     }
 
+    LOGINFO("Data Channel: Data Write started rreq=[{}]", rreq->to_compact_string());
+
     if (!rreq->save_pushed_data(rpc_data, incoming_buf.cbytes() + fb_size, push_req->data_size())) {
-        RD_LOGD("Data Channel: Data already received for rreq=[{}], ignoring this data", rreq->to_compact_string());
+        RD_LOG(ERROR, "Data Channel: Data already received for rreq=[{}], ignoring this data",
+               rreq->to_compact_string());
         return;
     }
 
@@ -276,7 +279,7 @@ void RaftReplDev::on_push_data_received(intrusive< sisl::GenericRpcData >& rpc_d
             } else {
                 rreq->add_state(repl_req_state_t::DATA_WRITTEN);
                 rreq->m_data_written_promise.setValue();
-                RD_LOGD("Data Channel: Data Write completed rreq=[{}]", rreq->to_compact_string());
+                LOGINFO("Data Channel: Data Write completed rreq=[{}]", rreq->to_compact_string());
             }
         });
 }
@@ -382,6 +385,10 @@ folly::Future< folly::Unit > RaftReplDev::notify_after_data_written(std::vector<
 
     // All the entries are done already, no need to wait
     if (futs.size() == 0) { return folly::makeFuture< folly::Unit >(folly::Unit{}); }
+    for (auto const& rreq : *rreqs) {
+        if ((rreq == nullptr) || (!rreq->has_linked_data())) { continue; }
+        LOGINFO("Raft Channel: Data future wait: rreq=[{}]", rreq->to_compact_string());
+    }
 
     return folly::collectAllUnsafe(futs).thenValue([this, rreqs](auto&& e) {
 #ifndef NDEBUG
@@ -390,7 +397,7 @@ folly::Future< folly::Unit > RaftReplDev::notify_after_data_written(std::vector<
             HS_DBG_ASSERT(rreq->has_state(repl_req_state_t::DATA_WRITTEN),
                           "Data written promise raised without updating DATA_WRITTEN state for rkey={}",
                           rreq->rkey().to_string());
-            RD_LOGD("Raft Channel: Data write completed and blkid mapped: rreq=[{}]", rreq->to_compact_string());
+            LOGINFO("Raft Channel: Data write completed and blkid mapped: rreq=[{}]", rreq->to_compact_string());
         }
 #endif
         RD_LOGT("Data Channel: {} pending reqs's data are written", rreqs->size());
@@ -473,7 +480,7 @@ void RaftReplDev::check_and_fetch_remote_data(std::vector< repl_req_ptr_t > rreq
 void RaftReplDev::fetch_data_from_remote(std::vector< repl_req_ptr_t > rreqs) {
     if (rreqs.size() == 0) { return; }
 
-    std::vector<::flatbuffers::Offset< RequestEntry > > entries;
+    std::vector< ::flatbuffers::Offset< RequestEntry > > entries;
     entries.reserve(rreqs.size());
 
     shared< flatbuffers::FlatBufferBuilder > builder = std::make_shared< flatbuffers::FlatBufferBuilder >();
@@ -867,12 +874,14 @@ void RaftReplDev::save_config(const nuraft::cluster_config& config) {
     std::unique_lock lg{m_config_mtx};
     (*m_raft_config_sb)["config"] = serialize_cluster_config(config);
     m_raft_config_sb.write();
+    LOGINFO("{}", __FUNCTION__);
 }
 
 void RaftReplDev::save_state(const nuraft::srv_state& state) {
     std::unique_lock lg{m_config_mtx};
     (*m_raft_config_sb)["state"] = nlohmann::json{{"term", state.get_term()}, {"voted_for", state.get_voted_for()}};
     m_raft_config_sb.write();
+    LOGINFO("{}", __FUNCTION__);
 }
 
 nuraft::ptr< nuraft::srv_state > RaftReplDev::read_state() {
@@ -930,6 +939,7 @@ void RaftReplDev::leave() {
     // post restart.
     m_rd_sb->destroy_pending = 0x1;
     m_rd_sb.write();
+    LOGINFO("{}", __FUNCTION__);
 
     RD_LOGI("RaftReplDev leave group");
     m_destroy_promise.setValue(ReplServiceError::OK); // In case proposer is waiting for the destroy to complete
@@ -978,6 +988,7 @@ void RaftReplDev::flush_durable_commit_lsn() {
     std::unique_lock lg{m_sb_mtx};
     m_rd_sb->durable_commit_lsn = lsn;
     m_rd_sb.write();
+    // LOGINFO("{}", __FUNCTION__);
 }
 
 ///////////////////////////////////  Private metohds ////////////////////////////////////
@@ -996,6 +1007,7 @@ void RaftReplDev::cp_flush(CP*) {
     m_rd_sb->checkpoint_lsn = lsn;
     m_rd_sb->last_applied_dsn = m_next_dsn.load();
     m_rd_sb.write();
+    LOGINFO("{}", __FUNCTION__);
     m_last_flushed_commit_lsn = lsn;
 }
 
@@ -1045,7 +1057,7 @@ void RaftReplDev::on_log_found(logstore_seq_num_t lsn, log_buffer buf, void* ctx
     nuraft::log_entry const* lentry = r_cast< nuraft::log_entry const* >(buf.bytes());
 
     // TODO: Handle the case where the log entry is not app_log, example config logs
-    if(lentry->get_val_type() != nuraft::log_val_type::app_log) { return; }
+    if (lentry->get_val_type() != nuraft::log_val_type::app_log) { return; }
 
     repl_journal_entry* jentry = r_cast< repl_journal_entry* >(lentry->get_buf().data_begin());
     RELEASE_ASSERT_EQ(jentry->major_version, repl_journal_entry::JOURNAL_ENTRY_MAJOR,

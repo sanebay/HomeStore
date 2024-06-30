@@ -86,7 +86,7 @@ void LogDev::start(bool format) {
         m_last_flush_idx = m_log_idx - 1;
     }
 
-    start_timer();
+    // start_timer();
     handle_unopened_log_stores(format);
 
     {
@@ -265,7 +265,7 @@ int64_t LogDev::append_async(const logstore_id_t store_id, const logstore_seq_nu
     if (flush_wait ||
         ((prev_size < threshold_size && ((prev_size + data.size()) >= threshold_size) &&
           !m_is_flushing.load(std::memory_order_relaxed)))) {
-        flush_if_needed(flush_wait ? 1 : -1);
+        // flush_if_needed(flush_wait ? 1 : -1);
     }
     return idx;
 }
@@ -475,6 +475,8 @@ void LogDev::on_flush_completion(LogGroup* lg) {
     lg->m_flush_finish_time = Clock::now();
     lg->m_post_flush_msg_rcvd_time = Clock::now();
     THIS_LOGDEV_LOG(TRACE, "Flush completed for logid[{} - {}]", lg->m_flush_log_idx_from, lg->m_flush_log_idx_upto);
+
+    LOGINFO("Flush completed for logid[{} - {}]", lg->m_flush_log_idx_from, lg->m_flush_log_idx_upto);
 
     m_log_records->complete(lg->m_flush_log_idx_from, lg->m_flush_log_idx_upto);
     m_last_flush_idx = lg->m_flush_log_idx_upto;

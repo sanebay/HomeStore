@@ -255,7 +255,7 @@ public:
             /* create files */
             LOGINFO("creating {} device files with each of size {} ", ndevices, homestore::in_bytes(dev_size));
             for (uint32_t i{0}; i < ndevices; ++i) {
-                s_dev_names.emplace_back(std::string{"/tmp/" + token.name_ + "_" + std::to_string(i + 1)});
+                s_dev_names.emplace_back(std::string{"/tmp/source/tests/" + token.name_ + "_" + std::to_string(i + 1)});
             }
 
             if (!fake_restart && init_device) { init_files(s_dev_names, dev_size); }
