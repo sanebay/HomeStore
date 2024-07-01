@@ -51,8 +51,13 @@ void ReplLogStore::end_of_append_batch(ulong start_lsn, ulong count) {
         reqs->emplace_back(std::move(rreq));
     }
 
-    RD_LOGT("Raft Channel: end_of_append_batch start_lsn={} count={} num_data_to_be_written={}", start_lsn, count,
+    LOGINFO("Raft Channel: end_of_append_batch start_lsn={} count={} num_data_to_be_written={}", start_lsn, count,
             reqs->size());
+
+    for (auto const& rreq : *reqs) {
+        if ((rreq == nullptr) || (!rreq->has_linked_data())) { continue; }
+        LOGINFO("Raft Channel: Data before future wait: rreq=[{}]", rreq->to_compact_string());
+    }
 
     // All requests are from proposer for data write, so as mentioned above we can skip the flush for now
     if (!reqs->empty()) {
@@ -72,6 +77,10 @@ void ReplLogStore::end_of_append_batch(ulong start_lsn, ulong count) {
         // Mark all the reqs also completely written
         for (auto const& rreq : *reqs) {
             if (rreq) { rreq->add_state(repl_req_state_t::LOG_FLUSHED); }
+        }
+        for (auto const& rreq : *reqs) {
+            if ((rreq == nullptr) || (!rreq->has_linked_data())) { continue; }
+            LOGINFO("Raft Channel: Data after future wait: rreq=[{}]", rreq->to_compact_string());
         }
     }
     sisl::VectorPool< repl_req_ptr_t >::free(reqs);
