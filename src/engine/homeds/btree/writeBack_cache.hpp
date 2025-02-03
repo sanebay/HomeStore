@@ -131,7 +131,7 @@ public:
                 bcp(nullptr),
                 req_q(),
                 dependent_cnt(1),
-                m_mem(nullptr){};
+                m_mem(nullptr) {};
     };
 
     //*************************************************** WriteBackCacheBuffer *******************************
@@ -280,6 +280,7 @@ public:
         const size_t cp_id{bcp->cp_id % MAX_CP_CNT};
         HS_REL_ASSERT((!dependent_bn || dependent_bn->bcp == bcp), "dependent request is modifided by other CP");
         writeback_req_ptr wbd_req = dependent_bn ? dependent_bn->req[cp_id] : nullptr;
+
         if (bn->bcp != bcp) {
             // create wb request
             auto wb_req = writeback_req_t::make_request();
@@ -304,10 +305,12 @@ public:
             /* check for dirty buffers cnt */
             m_dirty_buf_cnt[cp_id].increment(1);
             ResourceMgrSI().inc_dirty_buf_cnt(m_node_size);
+            LOGINFO("write buf node {}", bn->get_node_id());
         } else {
             HS_DBG_ASSERT_EQ(bn->req[cp_id]->bid.to_integer(), bn->get_node_id());
             if (bn->req[cp_id]->m_mem != bn->get_memvec_intrusive()) {
                 bn->req[cp_id]->m_mem = bn->get_memvec_intrusive();
+                LOGINFO("write buf node {}", bn->get_node_id());
                 HS_DBG_ASSERT_NOTNULL(bn->req[cp_id]->m_mem.get());
             }
         }
@@ -321,6 +324,7 @@ public:
                 wbd_req->req_q.push_back(wb_req);
             }
             wb_req->dependent_cnt.increment(1);
+            LOGINFO("write buf node {} dependent node {}", bn->get_node_id(), dependent_bn->get_node_id());
         }
     }
 
@@ -356,6 +360,8 @@ public:
         }
 
         if (bn->bcp->cp_id > bcp->cp_id) { return btree_status_t::cp_mismatch; }
+
+        LOGINFO("refresh buf node {} is_write_modify {}", bn->get_node_id(), is_write_modifiable);
 
         const size_t prev_cp_id{static_cast< size_t >((bcp->cp_id - 1)) % MAX_CP_CNT};
         auto req{bn->req[prev_cp_id]};
@@ -440,10 +446,6 @@ public:
                     shared_this->m_blkstore->write(wb_req->bid, wb_req->m_mem, 0, wb_req, false);
                     ++write_count;
 
-                    // we are done with this wb_req
-                    HS_REL_ASSERT_EQ(wb_req, wb_req->bn->req[cp_id]);
-                    wb_req->bn->req[cp_id] = nullptr;
-
                     if (wb_cache_outstanding_cnt > ResourceMgrSI().get_dirty_buf_qd()) {
                         CP_PERIODIC_LOG(
                             DEBUG, bt_cp_id,
@@ -479,6 +481,8 @@ public:
         auto wb_req = to_wb_req(bs_req);
         const size_t cp_id = wb_req->bcp->cp_id % MAX_CP_CNT;
         wb_req->state = homeds::btree::writeback_req_state::WB_REQ_COMPL;
+        LOGINFO("writeBack_completion_internal state compl node {} req id {}", wb_req->bn->get_node_id(),
+                wb_req->request_id);
 
         --wb_cache_outstanding_cnt;
         auto shared_this = this->shared_from_this();
@@ -537,6 +541,12 @@ public:
             queue_flush_buffers(nullptr);
         }
         ResourceMgrSI().dec_dirty_buf_cnt(m_node_size);
+
+        // we are done with this wb_req
+        HS_REL_ASSERT_EQ(wb_req, wb_req->bn->req[cp_id]);
+        wb_req->bn->req[cp_id] = nullptr;
+        LOGINFO("writeBack_completion_internal reset wb_req node {} req id {}", wb_req->bn->get_node_id(),
+                wb_req->request_id);
         /* req and btree node are pointing to each other which is preventing neither of them to be freed */
         wb_req->bn = nullptr;
 
