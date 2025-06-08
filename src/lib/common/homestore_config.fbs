@@ -121,7 +121,7 @@ table LogStore {
 
 table Generic {
     // cp timer in us
-    cp_timer_us: uint64 = 60000000 (hotswap);
+    cp_timer_us: uint64 = 1000000 (hotswap);
 
     // writeback cache flush threads
     cache_flush_threads : int32 = 1;
@@ -181,8 +181,8 @@ table ResourceLimits {
 
     /* num entries that raft logstore wants to reserve -- its truncate should not across this */
     /* 0 means HomeStore doesn't reserve anything and let nuraft controlls the truncation */
-    raft_logstore_reserve_threshold: uint32 = 0 (hotswap);   
-    
+    raft_logstore_reserve_threshold: uint32 = 0 (hotswap);
+
     /* resource audit timer in ms */
     resource_audit_timer_ms: uint32 = 120000;
 
@@ -252,10 +252,10 @@ table Consensus {
     // Minimum log gap a replica has to be from leader before joining the replica set.
     // 0 indicates the new member will join in cluster immediately.
     min_log_gap_to_join: int32 = 0;
-    
+
     // amount of time in millis to wait on data write before fetch data from remote;
     wait_data_write_timer_ms: uint64 = 1500 (hotswap);
-    
+
     // Leadership expiry (=0 indicates 20 times heartbeat period), set -1 to never expire
     leadership_expiry_ms: int32 = 0;
 

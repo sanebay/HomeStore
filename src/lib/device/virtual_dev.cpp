@@ -176,7 +176,8 @@ BlkAllocStatus VirtualDev::commit_blk(BlkId const& blkid) {
     return chunk->blk_allocator_mutable()->reserve_on_disk(blkid);
 }
 
-BlkAllocStatus VirtualDev::alloc_contiguous_blks(blk_count_t nblks, blk_alloc_hints const& hints, BlkId& out_blkid) {
+BlkAllocStatus VirtualDev::alloc_contiguous_blks(blk_count_t nblks, blk_alloc_hints const& hints,
+                                                 MultiBlkId& out_blkid) {
     BlkAllocStatus ret;
     try {
         MultiBlkId mbid;
@@ -190,8 +191,8 @@ BlkAllocStatus VirtualDev::alloc_contiguous_blks(blk_count_t nblks, blk_alloc_hi
         }
 
         if (ret == BlkAllocStatus::SUCCESS || (ret == BlkAllocStatus::PARTIAL && hints.partial_alloc_ok)) {
-            HS_REL_ASSERT_EQ(mbid.num_pieces(), 1, "out blkid more than 1 entries will lead to blk leak!");
-            out_blkid = mbid.to_single_blkid();
+            // HS_REL_ASSERT_EQ(mbid.num_pieces(), 1, "out blkid more than 1 entries will lead to blk leak!");
+            out_blkid = mbid;
         }
 
         // for failure case, fall through and return the status to caller;
@@ -254,11 +255,16 @@ BlkAllocStatus VirtualDev::alloc_blks(blk_count_t nblks, blk_alloc_hints const& 
     BlkAllocStatus status;
 
     do {
-        out_blkids.emplace_back(); // Put an empty MultiBlkId and use that for allocating them
-        BlkId& out_bid = out_blkids.back();
-        status = alloc_contiguous_blks(nblks_remain, h, out_bid);
+        MultiBlkId mbid;
+        status = alloc_contiguous_blks(nblks_remain, h, mbid);
 
-        auto nblks_this_iter = out_bid.blk_count();
+        blk_count_t nblks_this_iter = 0;
+        auto it = mbid.iterate();
+        while (auto const b = it.next()) {
+            nblks_this_iter += (*b).blk_count();
+            out_blkids.emplace_back(*b);
+        }
+
         nblks_remain = (nblks_remain < nblks_this_iter) ? 0 : (nblks_remain - nblks_this_iter);
 
         if (status != BlkAllocStatus::SUCCESS && status != BlkAllocStatus::PARTIAL) {
@@ -694,13 +700,16 @@ void VirtualDev::cp_flush(VDevCPContext* v_cp_ctx) {
 
     // All of the blkids which were captured in the current vdev cp context will now be freed and hence available for
     // allocation on the new CP dirty collection session which is ongoing
+    uint64_t count = 0;
     for (auto const& b : v_cp_ctx->m_free_blkid_list) {
         auto chunk = m_dmgr.get_chunk_mutable(b.chunk_num());
         // try to free a blk in a missing chunk, crash if it happens;
         if (!chunk) HS_DBG_ASSERT(false, "chunk is missing for blkid {}", b.to_string());
         BlkAllocator* allocator = chunk->blk_allocator_mutable();
         allocator->free(b);
+        count++;
     }
+    LOGINFO("Freed {} blks in name={} cp={}", count, m_name, cp->id());
 }
 
 // sync-ops during cp_flush, so return 100;
