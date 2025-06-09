@@ -28,7 +28,9 @@
 namespace homestore {
 IndexService& index_service() { return hs()->index_service(); }
 
-IndexService::IndexService(std::unique_ptr< IndexServiceCallbacks > cbs) : m_svc_cbs{std::move(cbs)} {
+IndexService::IndexService(std::unique_ptr< IndexServiceCallbacks > cbs,
+                           shared< ChunkSelector > custom_chunk_selector) :
+        m_svc_cbs{std::move(cbs)}, m_custom_chunk_selector(custom_chunk_selector) {
     m_ordinal_reserver = std::make_unique< sisl::IDReserver >();
     meta_service().register_handler(
         "index",
@@ -39,13 +41,12 @@ IndexService::IndexService(std::unique_ptr< IndexServiceCallbacks > cbs) : m_svc
 
     meta_service().register_handler(
         "wb_cache",
-        [this](meta_blk* mblk, sisl::byte_view buf, size_t size) {
-            m_wbcache_sb = std::pair{mblk, std::move(buf)};
-        },
+        [this](meta_blk* mblk, sisl::byte_view buf, size_t size) { m_wbcache_sb = std::pair{mblk, std::move(buf)}; },
         nullptr);
 }
 
-void IndexService::create_vdev(uint64_t size, HSDevType devType, uint32_t num_chunks) {
+void IndexService::create_vdev(uint64_t size, HSDevType devType, uint32_t num_chunks,
+                               chunk_selector_type_t chunk_sel_type) {
     auto const atomic_page_size = hs()->device_mgr()->atomic_page_size(devType);
     hs_vdev_context vdev_ctx;
     vdev_ctx.type = hs_vdev_type_t::INDEX_VDEV;
@@ -56,14 +57,14 @@ void IndexService::create_vdev(uint64_t size, HSDevType devType, uint32_t num_ch
                                                     .blk_size = atomic_page_size,
                                                     .dev_type = devType,
                                                     .alloc_type = blk_allocator_type_t::fixed,
-                                                    .chunk_sel_type = chunk_selector_type_t::ROUND_ROBIN,
+                                                    .chunk_sel_type = chunk_sel_type,
                                                     .multi_pdev_opts = vdev_multi_pdev_opts_t::ALL_PDEV_STRIPED,
                                                     .context_data = vdev_ctx.to_blob()});
 }
 
 shared< VirtualDev > IndexService::open_vdev(const vdev_info& vinfo, bool load_existing) {
-    m_vdev =
-        std::make_shared< VirtualDev >(*(hs()->device_mgr()), vinfo, nullptr /* event_cb */, true /* auto_recovery */);
+    m_vdev = std::make_shared< VirtualDev >(*(hs()->device_mgr()), vinfo, nullptr /* event_cb */,
+                                            true /* auto_recovery */, std::move(m_custom_chunk_selector));
     return m_vdev;
 }
 

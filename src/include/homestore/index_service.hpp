@@ -30,6 +30,7 @@ namespace homestore {
 class IndexWBCacheBase;
 class IndexTableBase;
 class VirtualDev;
+class ChunkSelector;
 
 class IndexServiceCallbacks {
 public:
@@ -53,13 +54,14 @@ private:
     mutable std::mutex m_index_map_mtx;
     std::map< uuid_t, std::shared_ptr< IndexTableBase > > m_index_map;
     std::unordered_map< uint32_t, std::shared_ptr< IndexTableBase > > m_ordinal_index_map;
+    std::shared_ptr< ChunkSelector > m_custom_chunk_selector;
 
 public:
-    IndexService(std::unique_ptr< IndexServiceCallbacks > cbs);
+    IndexService(std::unique_ptr< IndexServiceCallbacks > cbs, shared< ChunkSelector > custom_chunk_selector = nullptr);
     ~IndexService();
 
     // Creates the vdev that is needed to initialize the device
-    void create_vdev(uint64_t size, HSDevType devType, uint32_t num_chunks);
+    void create_vdev(uint64_t size, HSDevType devType, uint32_t num_chunks, chunk_selector_type_t chunk_sel_type);
 
     // Open the existing vdev which is represnted by the vdev_info_block
     shared< VirtualDev > open_vdev(const vdev_info& vb, bool load_existing);

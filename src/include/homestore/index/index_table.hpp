@@ -239,7 +239,7 @@ public:
 protected:
     ////////////////// Override Implementation of underlying store requirements //////////////////
     BtreeNodePtr alloc_node(bool is_leaf) override {
-        return wb_cache().alloc_buf([this, is_leaf](const IndexBufferPtr& idx_buf) -> BtreeNodePtr {
+        return wb_cache().alloc_buf(ordinal(), [this, is_leaf](const IndexBufferPtr& idx_buf) -> BtreeNodePtr {
             BtreeNode* n = this->init_node(idx_buf->raw_buffer(), idx_buf->blkid().to_integer(), true, is_leaf);
             static_cast< IndexBtreeNode* >(n)->attach_buf(idx_buf);
             return BtreeNodePtr{n};

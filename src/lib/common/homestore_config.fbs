@@ -121,7 +121,7 @@ table LogStore {
 
 table Generic {
     // cp timer in us
-    cp_timer_us: uint64 = 1000000 (hotswap);
+    cp_timer_us: uint64 = 500000 (hotswap);
 
     // writeback cache flush threads
     cache_flush_threads : int32 = 1;

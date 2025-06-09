@@ -92,13 +92,15 @@ void IndexWBCache::start_flush_threads() {
     }
 }
 
-BtreeNodePtr IndexWBCache::alloc_buf(node_initializer_t&& node_initializer) {
+BtreeNodePtr IndexWBCache::alloc_buf(uint32_t ordinal, node_initializer_t&& node_initializer) {
     auto cpg = cp_mgr().cp_guard();
     auto cp_ctx = r_cast< IndexCPContext* >(cpg.context(cp_consumer_t::INDEX_SVC));
 
     // Alloc a block of data from underlying vdev
     MultiBlkId multi_blkid;
-    auto ret = m_vdev->alloc_contiguous_blks(1, blk_alloc_hints{}, multi_blkid);
+    blk_alloc_hints hints;
+    hints.application_hint = ordinal;
+    auto ret = m_vdev->alloc_contiguous_blks(1, hints, multi_blkid);
     if (ret != BlkAllocStatus::SUCCESS) { return nullptr; }
 
     // Alloc buffer and initialize the node
