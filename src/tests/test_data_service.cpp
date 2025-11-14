@@ -477,15 +477,15 @@ public:
         ++m_outstanding_io_cnt;
         inst().async_free_blk(bid).thenValue([this, bid](auto&& err) {
             RELEASE_ASSERT(!err, "Free error");
-            LOGINFO("completed async_free_blks, bid freed: {}", bid.to_string());
-            // remove from ouststanding free blk set and written blk crc map;
+            // LOGINFO("completed async_free_blks, bid freed: {}", bid.to_string());
+            //  remove from ouststanding free blk set and written blk crc map;
             {
                 std::scoped_lock l(m_free_mtx, m_blkmap_mtx);
                 // loop bid for every piece of blkid;
                 auto bid_it = bid.iterate();
 
                 while (auto b = bid_it.next()) {
-                    LOGINFO("removing bid from map: {}", bid.to_string());
+                    // LOGINFO("removing bid from map: {}", bid.to_string());
                     m_outstanding_free_bid.erase(b->to_integer());
                     m_blk_crc_map.erase(b->to_integer());
                 }

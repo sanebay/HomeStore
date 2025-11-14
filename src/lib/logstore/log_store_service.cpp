@@ -347,7 +347,8 @@ void LogStoreService::start_threads() {
     auto ctx = std::make_shared< Context >();
 
     m_flush_fiber = nullptr;
-    iomanager.create_reactor("log_flush_thread", iomgr::TIGHT_LOOP | iomgr::ADAPTIVE_LOOP, 1 /* num_fibers */,
+    LOGINFO("log flush thread started with 2 fibers");
+    iomanager.create_reactor("log_flush_thread", iomgr::TIGHT_LOOP | iomgr::ADAPTIVE_LOOP, 2 /* num_fibers */,
                              [this, ctx](bool is_started) {
                                  if (is_started) {
                                      m_flush_fiber = iomanager.iofiber_self();

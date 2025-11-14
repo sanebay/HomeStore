@@ -425,11 +425,14 @@ folly::Future< std::error_code > VirtualDev::async_writev(const iovec* iov, cons
     auto const size = get_len(iov, iovcnt);
     auto* pdev = chunk->physical_dev_mutable();
 
-    HS_LOG(TRACE, device, "Writing in device: {}, offset = {}", pdev->pdev_id(), dev_offset);
+    // bool aligned = true;
     COUNTER_INCREMENT(m_metrics, vdev_write_count, 1);
     if (sisl_unlikely(!hs_utils::mod_aligned_sz(dev_offset, pdev->align_size()))) {
         COUNTER_INCREMENT(m_metrics, unalign_writes, 1);
+        // aligned = false;
     }
+    // LOGINFO("Writing in device: {}, offset = {} align_size {} aligned {}", pdev->pdev_id(), dev_offset,
+    // pdev->align_size(), aligned ? "true" : "false");
     return pdev->async_writev(iov, iovcnt, size, dev_offset, part_of_batch);
 }
 
@@ -448,9 +451,13 @@ folly::Future< std::error_code > VirtualDev::async_writev(const iovec* iov, cons
 
     HS_LOG(TRACE, device, "Writing in device: {}, offset = {}", pdev->pdev_id(), dev_offset);
     COUNTER_INCREMENT(m_metrics, vdev_write_count, 1);
+    // bool aligned = true;
     if (sisl_unlikely(!hs_utils::mod_aligned_sz(dev_offset, pdev->align_size()))) {
         COUNTER_INCREMENT(m_metrics, unalign_writes, 1);
+        // aligned = false;
     }
+    // LOGINFO("Writing in device: {}, offset = {} align_size {} aligned {}", pdev->pdev_id(), dev_offset,
+    //         pdev->align_size(), aligned ? "true" : "false");
     return pdev->async_writev(iov, iovcnt, size, dev_offset, false /* part_of_batch */);
 }
 
@@ -729,10 +736,14 @@ void VirtualDev::cp_flush(VDevCPContext* v_cp_ctx) {
     CP* cp = v_cp_ctx->cp();
 
     // pass down cp so that underlying components can get their customized CP context if needed;
+    auto start_time = Clock::now();
     m_chunk_selector->foreach_chunks([this, cp](cshared< Chunk >& chunk) {
+        // auto s = Clock::now();
         HS_LOG(TRACE, device, "Flushing chunk: {}, vdev: {}", chunk->chunk_id(), m_vdev_info.name);
         chunk->blk_allocator_mutable()->cp_flush(cp);
+        // LOGINFO("Flushed chunk time {}", get_elapsed_time_us(s));
     });
+    // LOGINFO("Flushed chunks time {}", get_elapsed_time_us(start_time));
 
     // All of the blkids which were captured in the current vdev cp context will now be freed and hence available for
     // allocation on the new CP dirty collection session which is ongoing
@@ -743,6 +754,7 @@ void VirtualDev::cp_flush(VDevCPContext* v_cp_ctx) {
         BlkAllocator* allocator = chunk->blk_allocator_mutable();
         allocator->free(b);
     }
+    LOGINFO("VirtualDev:: cp_flush time {}", get_elapsed_time_us(start_time));
 }
 
 // sync-ops during cp_flush, so return 100;

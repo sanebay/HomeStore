@@ -18,7 +18,7 @@ SoloReplDev::SoloReplDev(superblk< solo_repl_dev_superblk >&& rd_sb, bool load_e
     auto const gid = m_rd_sb->group_id;
     if (load_existing) {
         m_logdev_id = m_rd_sb->logdev_id;
-        logstore_service().open_logdev(m_rd_sb->logdev_id, flush_mode_t::TIMER, gid);
+        logstore_service().open_logdev(m_rd_sb->logdev_id, flush_mode_t::TIMER | flush_mode_t::INLINE, gid);
         logstore_service()
             .open_log_store(m_rd_sb->logdev_id, m_rd_sb->logstore_id, true /* append_mode */)
             .thenValue([this](auto log_store) {
@@ -29,7 +29,7 @@ SoloReplDev::SoloReplDev(superblk< solo_repl_dev_superblk >&& rd_sb, bool load_e
             });
         m_commit_upto = m_rd_sb->durable_commit_lsn;
     } else {
-        m_logdev_id = logstore_service().create_new_logdev(flush_mode_t::TIMER, gid);
+        m_logdev_id = logstore_service().create_new_logdev(flush_mode_t::TIMER | flush_mode_t::INLINE, gid);
         m_data_journal = logstore_service().create_new_log_store(m_logdev_id, true /* append_mode */);
         m_rd_sb->logstore_id = m_data_journal->get_store_id();
         m_rd_sb->logdev_id = m_logdev_id;
@@ -137,7 +137,12 @@ folly::Future< std::error_code > SoloReplDev::async_write(const std::vector< Mul
             LOGINFO("Block size mismatch total_size={} sgs_size={}", total_size, sgs_size);
             return folly::makeFuture< std::error_code >(std::make_error_code(std::errc::invalid_argument));
         }
+
         sisl::sg_list sgs{sgs_size, iovs};
+        // for (size_t i = 0; i < sgs.iovs.size(); i++) {
+        //     LOGINFO("async_write aligned {}",
+        //             reinterpret_cast< uint64_t >(sgs.iovs[i].iov_base) % 4096 == 0 ? "true" : "false");
+        // }
         futs.emplace_back(data_service().async_write(sgs, blkid, part_of_batch));
     }
 

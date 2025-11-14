@@ -39,8 +39,10 @@ CPManager::CPManager() :
         [this](meta_blk* mblk, sisl::byte_view buf, size_t size) { on_meta_blk_found(std::move(buf), (void*)mblk); },
         nullptr);
 
-    resource_mgr().register_dirty_buf_exceed_cb(
-        [this]([[maybe_unused]] int64_t dirty_buf_count, bool critical) { this->trigger_cp_flush(false /* force */); });
+    resource_mgr().register_dirty_buf_exceed_cb([this]([[maybe_unused]] int64_t dirty_buf_count, bool critical) {
+        LOGINFO("========== Dirty buf exceed. Trigger cp flush");
+        this->trigger_cp_flush(false /* force */);
+    });
 
     start_timer_thread();
     start_cp_thread();
@@ -177,6 +179,7 @@ void CPManager::cp_io_exit(CP* cp) {
     HS_DBG_ASSERT_NE(cp->m_cp_status, cp_status_t::cp_flushing);
     if (cp->m_enter_cnt.decrement_testz(1) && (cp->m_cp_status == cp_status_t::cp_flush_prepare)) {
         m_wd_cp->set_cp(cp);
+        LOGINFO("cp_io_exit causing cp_start_flush");
         cp_start_flush(cp);
     }
 }
@@ -214,7 +217,7 @@ folly::Future< bool > CPManager::do_trigger_cp_flush(bool force, bool flush_on_s
     folly::Future< bool > ret_fut = folly::Future< bool >::makeEmpty();
     auto cur_cp = cp_guard();
     cur_cp->m_cp_status = cp_status_t::cp_trigger;
-    HS_PERIODIC_LOG(INFO, cp, "<<<<<<<<<<< Triggering flush of the CP {}", cur_cp->to_string());
+    LOGINFO("<<<<<<<<<<< Triggering flush of the CP {}", cur_cp->to_string());
     COUNTER_INCREMENT(*m_metrics, cp_cnt, 1);
     m_wd_cp->set_cp(cur_cp.get());
 
@@ -263,7 +266,7 @@ folly::Future< bool > CPManager::do_trigger_cp_flush(bool force, bool flush_on_s
 
 void CPManager::cp_start_flush(CP* cp) {
     std::vector< folly::Future< bool > > futs;
-    HS_PERIODIC_LOG(INFO, cp, "Starting CP {} flush", cp->id());
+    LOGINFO("Starting CP {} flush", cp->id());
     cp->m_cp_status = cp_status_t::cp_flushing;
     for (size_t svcid = 0; svcid < (size_t)cp_consumer_t::SENTINEL; svcid++) {
         if (svcid == (size_t)cp_consumer_t::SEALER) { continue; }
@@ -315,7 +318,7 @@ void CPManager::on_cp_flush_done(CP* cp) {
         // Dont access any cp state after this, in case trigger_back_2_back_cp is false, because its false on
         // cp_shutdown_initated and setting this promise could destruct the CPManager itself.
         if (trigger_back_2_back_cp) {
-            HS_PERIODIC_LOG(INFO, cp, "Triggering back to back CP");
+            LOGINFO("Triggering back to back CP");
             COUNTER_INCREMENT(*m_metrics, back_to_back_cps, 1);
             trigger_cp_flush(false);
         }
@@ -372,6 +375,7 @@ iomgr::io_fiber_t CPManager::pick_blocking_io_fiber() const {
 
 //////////////////////////////////////// CP Guard class ////////////////////////////////////////////
 CPGuard::CPGuard(CPManager* mgr) {
+    auto start = Clock::now();
     if (t_cp_stack.empty()) {
         // First CP in this thread stack.
         m_cp = mgr->cp_io_enter();
@@ -382,14 +386,17 @@ CPGuard::CPGuard(CPManager* mgr) {
     }
     t_cp_stack.push(m_cp);
     m_pushed = true; // m_pushed represented if this is added to current thread stack
+    HISTOGRAM_OBSERVE(*m_cp->m_cp_mgr->m_metrics, cp_guard_constr_latency, get_elapsed_time_us(start));
 }
 
 CPGuard::~CPGuard() {
+    auto start = Clock::now();
     if (m_pushed && !t_cp_stack.empty()) {
         //        HS_DBG_ASSERT_EQ((void*)m_cp, (void*)t_cp_stack.top(), "CPGuard mismatch of CP pointers");
         t_cp_stack.pop();
     }
     if (m_cp) { m_cp->m_cp_mgr->cp_io_exit(m_cp); }
+    HISTOGRAM_OBSERVE(*m_cp->m_cp_mgr->m_metrics, cp_guard_destr_latency, get_elapsed_time_us(start));
 }
 
 CPGuard::CPGuard(const CPGuard& other) {

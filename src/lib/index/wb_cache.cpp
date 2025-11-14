@@ -144,10 +144,12 @@ void IndexWBCache::write_buf(const BtreeNodePtr& node, const IndexBufferPtr& buf
 
 void IndexWBCache::read_buf(bnodeid_t id, BtreeNodePtr& node, node_initializer_t&& node_initializer) {
     auto const blkid = BlkId{id};
-
+    auto const start_time = Clock::now();
 retry:
     // Check if the blkid is already in cache, if notL load and put it into the cache
     if (!m_in_recovery && m_cache.get(blkid, node)) { return; }
+
+    COUNTER_INCREMENT(m_metrics, cache_miss_count, 1);
 
     // Read the buffer from virtual device
     auto idx_buf = std::make_shared< IndexBuffer >(blkid, m_node_size, m_vdev->align_size());
@@ -164,6 +166,8 @@ retry:
             goto retry;
         }
     }
+
+    HISTOGRAM_OBSERVE(m_metrics, cache_miss_read_latency, get_elapsed_time_us(start_time));
 }
 
 bool IndexWBCache::get_writable_buf(const BtreeNodePtr& node, CPContext* context) {

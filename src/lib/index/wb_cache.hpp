@@ -32,6 +32,25 @@ class Evictor;
 namespace homestore {
 class VirtualDev;
 
+class IndexWBCacheMetrics : public sisl::MetricsGroupWrapper {
+public:
+    explicit IndexWBCacheMetrics() : sisl::MetricsGroupWrapper{"IndexWBCache", "WriteBachCache"} {
+        REGISTER_COUNTER(cache_miss_count, "Cache miss count");
+
+        REGISTER_HISTOGRAM(cache_miss_read_latency, "Cache miss read latency in us",
+                           HistogramBucketsType(OpLatecyBuckets));
+
+        register_me_to_farm();
+    }
+
+    IndexWBCacheMetrics(const IndexWBCacheMetrics&) = delete;
+    IndexWBCacheMetrics(IndexWBCacheMetrics&&) noexcept = delete;
+    IndexWBCacheMetrics& operator=(const IndexWBCacheMetrics&) = delete;
+    IndexWBCacheMetrics& operator=(IndexWBCacheMetrics&&) noexcept = delete;
+
+    ~IndexWBCacheMetrics() { deregister_me_from_farm(); }
+};
+
 class IndexWBCache : public IndexWBCacheBase {
 private:
     std::shared_ptr< VirtualDev > m_vdev;
@@ -42,6 +61,7 @@ private:
     void* m_meta_blk;
     bool m_in_recovery{false};
     std::unordered_set< uint32_t > m_updated_ordinals;
+    IndexWBCacheMetrics m_metrics;
 
 public:
     IndexWBCache(const std::shared_ptr< VirtualDev >& vdev, std::pair< meta_blk*, sisl::byte_view > sb,
@@ -93,4 +113,5 @@ private:
     void update_up_buffer_counters(IndexBufferPtr const& buf);
     void prune_up_buffers(IndexBufferPtr const& buf, std::vector< IndexBufferPtr >& bufs_to_repair);
 };
+
 } // namespace homestore

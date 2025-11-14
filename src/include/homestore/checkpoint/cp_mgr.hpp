@@ -36,6 +36,8 @@ public:
         REGISTER_COUNTER(back_to_back_cps, "back to back cp");
         REGISTER_COUNTER(cp_cnt, "cp cnt");
         REGISTER_HISTOGRAM(cp_latency, "cp latency (in us)", HistogramBucketsType(OpLatecyBuckets));
+        REGISTER_HISTOGRAM(cp_guard_constr_latency, "cp latency (in us)", HistogramBucketsType(OpLatecyBuckets));
+        REGISTER_HISTOGRAM(cp_guard_destr_latency, "cp latency (in us)", HistogramBucketsType(OpLatecyBuckets));
         register_me_to_farm();
     }
 
@@ -150,7 +152,7 @@ public:
 class CPManager {
     friend class CPGuard;
 
-private:
+public:
     CP* m_cur_cp{nullptr}; // Current CP information
     std::unique_ptr< CPMgrMetrics > m_metrics;
     std::mutex m_trigger_cp_mtx;

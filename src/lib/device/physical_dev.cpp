@@ -139,6 +139,7 @@ void PhysicalDev::close_device() { close_and_uncache_dev(m_devname, m_iodev); }
 folly::Future< std::error_code > PhysicalDev::async_write(const char* data, uint32_t size, uint64_t offset,
                                                           bool part_of_batch) {
     auto const start_time = get_current_time();
+    // LOGINFO("Writing to disk aligned {} offset {} size {}", offset % 4096 == 0 ? "true" : "false", offset, size);
     return m_drive_iface->async_write(m_iodev.get(), data, size, offset, part_of_batch)
         .thenValue([this, start_time, size](std::error_code ec) {
             HISTOGRAM_OBSERVE(m_metrics, write_io_sizes, (((size - 1) / 1024) + 1));
@@ -151,6 +152,7 @@ folly::Future< std::error_code > PhysicalDev::async_write(const char* data, uint
 folly::Future< std::error_code > PhysicalDev::async_writev(const iovec* iov, int iovcnt, uint32_t size, uint64_t offset,
                                                            bool part_of_batch) {
     auto const start_time = get_current_time();
+    // LOGINFO("Writing to disk aligned {} offset {} size {}", offset % 4096 == 0 ? "true" : "false", offset, size);
     return m_drive_iface->async_writev(m_iodev.get(), iov, iovcnt, size, offset, part_of_batch)
         .thenValue([this, start_time, size](std::error_code ec) {
             HISTOGRAM_OBSERVE(m_metrics, write_io_sizes, (((size - 1) / 1024) + 1));
@@ -202,6 +204,8 @@ folly::Future< std::error_code > PhysicalDev::queue_fsync() { return m_drive_ifa
 
 std::error_code PhysicalDev::sync_write(const char* data, uint32_t size, uint64_t offset) {
     auto const start_time = get_current_time();
+    // LOGINFO("Sync writing to disk aligned {} offset {} size {}", offset % 4096 == 0 ? "true" : "false", offset,
+    // size);
     auto const ret = m_drive_iface->sync_write(m_iodev.get(), data, size, offset);
     HISTOGRAM_OBSERVE(m_metrics, drive_write_latency, get_elapsed_time_us(start_time));
     HISTOGRAM_OBSERVE(m_metrics, write_io_sizes, (((size - 1) / 1024) + 1));
@@ -211,6 +215,8 @@ std::error_code PhysicalDev::sync_write(const char* data, uint32_t size, uint64_
 
 std::error_code PhysicalDev::sync_writev(const iovec* iov, int iovcnt, uint32_t size, uint64_t offset) {
     auto const start_time = Clock::now();
+    // LOGINFO("Sync writing to disk aligned {} offset {} size {}", offset % 4096 == 0 ? "true" : "false", offset,
+    // size);
     auto const ret = m_drive_iface->sync_writev(m_iodev.get(), iov, iovcnt, size, offset);
     HISTOGRAM_OBSERVE(m_metrics, drive_write_latency, get_elapsed_time_us(start_time));
     HISTOGRAM_OBSERVE(m_metrics, write_io_sizes, (((size - 1) / 1024) + 1));

@@ -335,6 +335,21 @@ public:
         REGISTER_HISTOGRAM(btree_inclusive_time_in_leaf_node, "Inclusive time spent (Read locked) on leaf node (ns)",
                            "btree_inclusive_time_in_node", {"node_type", "leaf"},
                            HistogramBucketsType(OpLatecyBuckets));
+        REGISTER_HISTOGRAM(btree_write_time, "time spent in write (ns)", "btree_write_time");
+        REGISTER_HISTOGRAM(btree_read_query_time, "time spent in read (ns)", "btree_read_query_time");
+        REGISTER_HISTOGRAM(btree_read_lock_time_in_leaf_node, "time spent in read lock contention on leaf node",
+                           "btree_read_lock_time_in_leaf_node");
+        REGISTER_HISTOGRAM(btree_read_lock_time_in_int_node, "time spent in read lock contention on interior node",
+                           "btree_read_lock_time_in_int_node");
+        REGISTER_HISTOGRAM(btree_write_lock_time_in_leaf_node, "time spent in write lock contention on leaf node",
+                           "btree_write_lock_time_in_leaf_node");
+        REGISTER_HISTOGRAM(btree_write_lock_time_in_int_node, "time spent in write lock contention on interior node",
+                           "btree_write_lock_time_in_int_node");
+        REGISTER_HISTOGRAM(btree_traversal_time, "time spent in btree traversal (ns)", "btree_traversal_time");
+        REGISTER_HISTOGRAM(btree_leaf_mutate_time, "time spent in mutate leaf (ns)", "btree_leaf_mutate_time");
+        REGISTER_HISTOGRAM(btree_cp_guard_latency, "time spent in mutate leaf (ns)", "btree_cp_guard_latency");
+        REGISTER_HISTOGRAM(btree_without_cp_guard_latency, "time spent in mutate leaf (ns)",
+                           "btree_without_cp_guard_latency");
 
         register_me_to_farm();
     }

@@ -37,8 +37,10 @@ btree_status_t Btree< K, V >::do_put(const BtreeNodePtr& my_node, locktype_t cur
     if (my_node->is_leaf()) {
         /* update the leaf node */
         BT_NODE_LOG_ASSERT_EQ(curlock, locktype_t::WRITE, my_node);
+        HISTOGRAM_OBSERVE(m_metrics, btree_traversal_time, get_elapsed_time_us(req.m_start_time));
         ret = mutate_write_leaf_node(my_node, req);
         unlock_node(my_node, curlock);
+        HISTOGRAM_OBSERVE(m_metrics, btree_leaf_mutate_time, get_elapsed_time_us(req.m_start_time));
         return ret;
     }
 

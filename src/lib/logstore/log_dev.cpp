@@ -47,6 +47,8 @@ static bool has_data_service() { return HomeStore::instance()->has_data_service(
 LogDev::LogDev(logdev_id_t id, flush_mode_t flush_mode, uuid_t pid) :
         m_logdev_id{id}, m_flush_mode{flush_mode}, m_parent_id{pid} {
     m_flush_size_multiple = HS_DYNAMIC_CONFIG(logstore->flush_size_multiple_logdev);
+    LOGINFO("LogDev data_threshold {} flush_period {}", LogDev::flush_data_threshold_size(),
+            HS_DYNAMIC_CONFIG(logstore.max_time_between_flush_us));
 }
 
 void LogDev::start(bool format, std::shared_ptr< JournalVirtualDev > vdev) {
@@ -172,12 +174,15 @@ void LogDev::destroy() {
 
 void LogDev::start_timer() {
     // Currently only tests set it to 0.
-    if (HS_DYNAMIC_CONFIG(logstore.flush_timer_frequency_us))
+    if (HS_DYNAMIC_CONFIG(logstore.flush_timer_frequency_us)) {
+        THIS_LOGDEV_LOG(INFO, "Logdev start time log_dev={} frequency_us={}", m_logdev_id,
+                        HS_DYNAMIC_CONFIG(logstore.flush_timer_frequency_us));
         iomanager.run_on_wait(logstore_service().flush_thread(), [this]() {
             m_flush_timer_hdl = iomanager.schedule_thread_timer(
                 HS_DYNAMIC_CONFIG(logstore.flush_timer_frequency_us) * 1000, true /* recurring */, nullptr /* cookie */,
                 [this](void*) { flush_if_necessary(); });
         });
+    }
 }
 
 folly::Future< int > LogDev::stop_timer() {
@@ -582,13 +587,13 @@ void LogDev::on_flush_completion(LogGroup* lg) {
     // since we support out-of-order lsn write, so no need to guarantee the order of logstore write completion
     for (auto const& [idx, req] : req_map) {
         m_pending_callback++;
-        iomanager.run_on_forget(iomgr::reactor_regex::random_worker, /* iomgr::fiber_regex::syncio_only, */
-                                [this, dev_offset, idx, req]() {
-                                    auto ld_key = logdev_key{idx, dev_offset};
-                                    auto comp_cb = req->log_store->get_comp_cb();
-                                    (req->cb) ? req->cb(req, ld_key) : comp_cb(req, ld_key);
-                                    m_pending_callback--;
-                                });
+        // iomanager.run_on_forget(iomgr::reactor_regex::random_worker, /* iomgr::fiber_regex::syncio_only, */
+        //                         [this, dev_offset, idx, req]() {
+        auto ld_key = logdev_key{idx, dev_offset};
+        auto comp_cb = req->log_store->get_comp_cb();
+        (req->cb) ? req->cb(req, ld_key) : comp_cb(req, ld_key);
+        m_pending_callback--;
+        //                        });
     }
 }
 

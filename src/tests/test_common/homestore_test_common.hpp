@@ -473,7 +473,9 @@ private:
                    .chunk_size = svc_params[HS_SERVICE::LOG].chunk_size,
                    .vdev_size_type = svc_params[HS_SERVICE::LOG].vdev_size_type}},
                  {HS_SERVICE::DATA,
-                  {.size_pct = svc_params[HS_SERVICE::DATA].size_pct,
+
+                  {.dev_type = homestore::HSDevType::Fast,
+                   .size_pct = svc_params[HS_SERVICE::DATA].size_pct,
                    .num_chunks = svc_params[HS_SERVICE::DATA].num_chunks,
                    .alloc_type = svc_params[HS_SERVICE::DATA].blkalloc_type,
                    .chunk_sel_type = svc_params[HS_SERVICE::DATA].custom_chunk_selector
@@ -486,7 +488,8 @@ private:
                        ? chunk_selector_type_t::CUSTOM
                        : chunk_selector_type_t::ROUND_ROBIN}},
                  {HS_SERVICE::REPLICATION,
-                  {.size_pct = svc_params[HS_SERVICE::REPLICATION].size_pct,
+                  {.dev_type = homestore::HSDevType::Fast,
+                   .size_pct = svc_params[HS_SERVICE::REPLICATION].size_pct,
                    .alloc_type = svc_params[HS_SERVICE::REPLICATION].blkalloc_type,
                    .chunk_sel_type = svc_params[HS_SERVICE::REPLICATION].custom_chunk_selector
                        ? chunk_selector_type_t::CUSTOM

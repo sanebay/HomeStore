@@ -46,6 +46,7 @@ struct BtreeRequest {
     void* m_app_context{nullptr};
     void* m_op_context{nullptr};
     std::unique_ptr< std::vector< trace_route_entry > > route_tracing{nullptr};
+    Clock::time_point m_start_time;
 };
 
 // Base class for all range related operations

@@ -158,16 +158,21 @@ public:
         if (is_stopping()) return btree_status_t::stopping;
         incr_pending_request_num();
         auto ret = btree_status_t::success;
+        auto start = Clock::now();
         do {
+
             auto cpg = cp_mgr().cp_guard();
             put_req.m_op_context = (void*)cpg.context(cp_consumer_t::INDEX_SVC);
+            auto start2 = Clock::now();
             ret = Btree< K, V >::put(put_req);
             if (ret == btree_status_t::cp_mismatch) {
                 LOGTRACEMOD(wbcache, "CP Mismatch, retrying put");
                 COUNTER_INCREMENT(this->m_metrics, btree_retry_count, 1);
             }
+            HISTOGRAM_OBSERVE(this->m_metrics, btree_without_cp_guard_latency, get_elapsed_time_us(start2));
         } while (ret == btree_status_t::cp_mismatch);
         decr_pending_request_num();
+        HISTOGRAM_OBSERVE(this->m_metrics, btree_cp_guard_latency, get_elapsed_time_us(start));
         return ret;
     }
 

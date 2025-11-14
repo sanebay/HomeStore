@@ -50,13 +50,14 @@ void Btree< K, V >::set_root_node_info(const BtreeLinkInfo& info) {
 }
 
 template < typename K, typename V >
-uint16_t Btree< K, V >::get_btree_depth() const {return m_btree_depth;}
-
-template < typename K, typename V >
-std::pair<uint64_t,uint64_t> Btree< K, V >::get_num_nodes() const {
-    return {m_total_interior_nodes, m_total_leaf_nodes};
+uint16_t Btree< K, V >::get_btree_depth() const {
+    return m_btree_depth;
 }
 
+template < typename K, typename V >
+std::pair< uint64_t, uint64_t > Btree< K, V >::get_num_nodes() const {
+    return {m_total_interior_nodes, m_total_leaf_nodes};
+}
 
 template < typename K, typename V >
 std::pair< btree_status_t, uint64_t > Btree< K, V >::destroy_btree(void* context) {
@@ -87,7 +88,8 @@ btree_status_t Btree< K, V >::put(ReqT& put_req) {
     COUNTER_INCREMENT(m_metrics, btree_write_ops_count, 1);
     auto acq_lock = locktype_t::READ;
     bool is_leaf = false;
-
+    auto start_time = Clock::now();
+    put_req.m_start_time = start_time;
     m_btree_lock.lock_shared();
     btree_status_t ret = btree_status_t::success;
 
@@ -144,6 +146,9 @@ out:
     if (ret != btree_status_t::success && ret != btree_status_t::cp_mismatch) {
         BT_LOG(ERROR, "btree put failed {}", ret);
         COUNTER_INCREMENT(m_metrics, write_err_cnt, 1);
+    } else if (ret == btree_status_t::success) {
+        auto time_spent = get_elapsed_time_us(start_time);
+        HISTOGRAM_OBSERVE(m_metrics, btree_write_time, time_spent);
     }
 
     return ret;
@@ -156,6 +161,7 @@ btree_status_t Btree< K, V >::get(ReqT& greq) const {
                   "get api is called with non get request type");
     COUNTER_INCREMENT(m_metrics, btree_query_ops_count, 1);
     btree_status_t ret = btree_status_t::success;
+    auto start_time = Clock::now();
 
     m_btree_lock.lock_shared();
     BtreeNodePtr root;
@@ -166,6 +172,11 @@ btree_status_t Btree< K, V >::get(ReqT& greq) const {
     ret = do_get(root, greq);
 out:
     m_btree_lock.unlock_shared();
+
+    if (ret == btree_status_t::success) {
+        auto time_spent = get_elapsed_time_us(start_time);
+        HISTOGRAM_OBSERVE(m_metrics, btree_read_query_time, time_spent);
+    }
 
 #ifndef NDEBUG
     check_lock_debug();
